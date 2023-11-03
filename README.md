@@ -23,7 +23,7 @@ Priorities can be from 0 to 255 and are specified with an additional `[P#]` in t
 
 Special containers use Custom Data to select items to fill the container with.
 
-If you name a container with Special in the name, and the customdata is empty, it will populate the CustomData with whatever is in the container at the time and will attempt to maintain those numbers as tightly as possible every time you run the sort command, moving items out if there are too many, and taking items from lower priority containers if there are too few. Priority does affect special containers, and `broad` containers with a higher priority will steal from special containers to fill themselves.
+If you name a container with Special in the name, and the CustomData is empty, it will populate the CustomData with whatever is in the container at the time and will attempt to maintain those numbers as tightly as possible every time you run the sort command, moving items out if there are too many, and taking items from lower priority containers if there are too few. Priority does affect special containers, and broad (e.g. Components) containers with a higher priority will steal from special containers to fill themselves if they are higher priority.
 
 An example of the custom data is:
 ```ini
