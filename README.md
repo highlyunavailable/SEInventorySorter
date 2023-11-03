@@ -6,16 +6,16 @@ It's a lot like [Isy's Inventory Manager](https://steamcommunity.com/sharedfiles
 
 Broad category container names:
 
-Ores
-Ingots
-Ammo
-Components
-Bottles
-Tools
+* `Ores`
+* `Ingots`
+* `Ammo`
+* `Components`
+* `Bottles`
+* `Tools`
 
 Special container tag:
 
-Special
+* `Special`
 
 Broad categories and special containers can be combined: `Cargo Container Special, Bottles and Tools` is valid.
 
