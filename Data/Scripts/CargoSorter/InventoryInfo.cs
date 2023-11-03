@@ -1,0 +1,301 @@
+﻿using System;
+using System.Collections.Generic;
+using Sandbox.Definitions;
+using Sandbox.Game;
+using Sandbox.ModAPI;
+using VRage;
+using VRage.Game;
+using VRage.Game.ModAPI;
+using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.ObjectBuilders;
+using VRage.Utils;
+
+namespace CargoSorter
+{
+    public class InventoryInfo
+    {
+        public byte Priority;
+        public TypeRequests TypeRequests;
+        public Dictionary<MyDefinitionId, MyFixedPoint> SpecialRequests;
+        public Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
+        public MyFixedPoint VirtualVolume;
+        public MyFixedPoint VirtualMass;
+        public readonly MyFixedPoint MaxVolume;
+        public readonly MyFixedPoint MaxMass;
+        public readonly bool IsConstrained;
+        public readonly MyInventoryConstraint Constraint;
+        public readonly MyInventory RealInventory;
+        public readonly IMyCubeBlock Block;
+
+        public InventoryInfo(MyInventory realInventory)
+        {
+            Block = realInventory.Entity as IMyCubeBlock;
+            Priority = byte.MaxValue;
+            VirtualInventory = new Dictionary<MyDefinitionId, MyFixedPoint>(realInventory.GetItemsCount());
+            VirtualVolume = realInventory.CurrentVolume;
+            VirtualMass = realInventory.CurrentMass - realInventory.ExternalMass;
+            MaxVolume = realInventory.MaxVolume;
+            MaxMass = realInventory.MaxMass;
+            IsConstrained = realInventory.IsConstrained;
+            Constraint = realInventory.Constraint;
+            RealInventory = realInventory;
+
+            foreach (var item in realInventory.GetItems())
+            {
+                MyFixedPoint amount;
+                VirtualInventory.TryGetValue(item.Content.GetId(), out amount);
+                amount += item.Amount;
+                VirtualInventory[item.Content.GetId()] = amount;
+            }
+
+            var config = CargoSorterSessionComponent.Instance?.Config;
+            if (config == null)
+            {
+                TypeRequests = TypeRequests.Nothing;
+                return;
+            }
+
+            if (Block.DisplayNameText.Contains(config.OreContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Ores;
+            }
+            if (Block.DisplayNameText.Contains(config.IngotContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Ingots;
+            }
+            if (Block.DisplayNameText.Contains(config.ComponentContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Components;
+            }
+            if (Block.DisplayNameText.Contains(config.ToolContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Tools;
+            }
+            if (Block.DisplayNameText.Contains(config.AmmoContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Ammo;
+            }
+            if (Block.DisplayNameText.Contains(config.BottleContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Bottles;
+            }
+            if (Block.DisplayNameText.Contains(config.SpecialContainerKeyword))
+            {
+                TypeRequests |= TypeRequests.Special;
+                SpecialRequests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                ParseSpecialRequests(Block, SpecialRequests);
+            }
+
+            var priorityStartIndex = Block.DisplayNameText.IndexOf("[P", StringComparison.OrdinalIgnoreCase);
+            if (priorityStartIndex > -1)
+            {
+                priorityStartIndex += 2;
+                var priorityLen = 0;
+                bool foundTerminator = false;
+                while (priorityStartIndex + priorityLen < Block.DisplayNameText.Length && priorityLen < 4)
+                {
+                    if (Block.DisplayNameText[priorityStartIndex + priorityLen] == ']')
+                    {
+                        foundTerminator = true;
+                        break;
+                    }
+                    priorityLen++;
+                }
+
+                if (priorityLen > 0 && foundTerminator)
+                {
+                    if (!byte.TryParse(Block.DisplayNameText.Substring(priorityStartIndex, priorityLen), out Priority))
+                    {
+                        Priority = byte.MaxValue;
+                    }
+                }
+            }
+
+            if (TypeRequests.Equals(TypeRequests.Nothing) && Priority == byte.MaxValue)
+            {
+                if (Block is IMyGasGenerator)
+                {
+                    TypeRequests = TypeRequests.GasGeneratorOre;
+                    Priority = 0;
+                }
+                else if (Block is IMyAssembler) // Survival kits are OK here too
+                {
+                    TypeRequests = TypeRequests.AssemblerIngots;
+                    Priority = 0;
+                }
+                else if (Block is IMyRefinery)
+                {
+                    TypeRequests = TypeRequests.RefineryOre;
+                    Priority = 0;
+                }
+                else if (Block is IMyGasTank)
+                {
+                    TypeRequests = TypeRequests.GasTankBottles;
+                }
+                else if (Block is IMyReactor)
+                {
+                    TypeRequests = TypeRequests.ReactorFuel;
+                    Priority = 0;
+                }
+                else if (Block is IMyUserControllableGun)
+                {
+                    TypeRequests = TypeRequests.WeaponAmmo;
+                    Priority = 0;
+                }
+                else if (Block is IMyConveyorSorter)
+                {
+                    // If it doesn't contain Sorter in the name, it's probably a weaponcore weapon.
+                    TypeRequests = Block.BlockDefinition.SubtypeId.Contains("Sorter") ? TypeRequests.SorterItems : TypeRequests.WeaponAmmo;
+                    Priority = 0;
+                }
+            }
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
+        }
+
+        private void ParseSpecialRequests(IMyCubeBlock block, Dictionary<MyDefinitionId, MyFixedPoint> specialRequests)
+        {
+            var terminalBlock = block as IMyTerminalBlock;
+            if (!Util.IsValid(terminalBlock))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} isn't a terminal block");
+                return;
+            }
+            var ini = new MyIni();
+            if (!ini.TryParse(terminalBlock.CustomData))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
+                if (string.IsNullOrWhiteSpace(terminalBlock.CustomData))
+                {
+                    terminalBlock.CustomData = BuildCurrentContentsSpecialData(block, ini);
+                }
+                else
+                {
+                    return;
+                }
+            }
+            if (!ini.ContainsSection("Inventory"))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} has no Inventory config section");
+                terminalBlock.CustomData = BuildCurrentContentsSpecialData(block, ini);
+            }
+            List<MyIniKey> iniKeys = new List<MyIniKey>();
+            ini.GetKeys("Inventory", iniKeys);
+
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} has {iniKeys.Count}");
+            foreach (var iniKey in iniKeys)
+            {
+                if (iniKey.IsEmpty)
+                {
+                    continue;
+                }
+                MyDefinitionId definitionId;
+                if (!MyDefinitionId.TryParse(MyObjectBuilderType.LEGACY_TYPE_PREFIX + iniKey.Name, out definitionId) && !MyDefinitionId.TryParse(iniKey.Name, out definitionId))
+                {
+                    continue;
+                }
+                MyPhysicalItemDefinition physItem;
+                if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem))
+                {
+                    continue;
+                }
+
+                var value = ini.Get(iniKey);
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
+                var valueString = value.ToString();
+                if (valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
+                {
+                    specialRequests[definitionId] = MyFixedPoint.MaxValue;
+                    continue;
+                }
+
+                int itemCount;
+                if (!int.TryParse(valueString, out itemCount) || itemCount < 0)
+                {
+                    continue;
+                }
+
+                specialRequests[definitionId] = (MyFixedPoint)itemCount;
+            }
+        }
+
+        private string BuildCurrentContentsSpecialData(IMyCubeBlock block, MyIni ini)
+        {
+            ini.AddSection("Inventory");
+            var items = new Dictionary<SerializableDefinitionId, MyFixedPoint>();
+            for (int i = 0; i < block.InventoryCount; i++)
+            {
+                var inv = (MyInventory)block.GetInventory(i);
+                foreach (var item in inv.GetItems())
+                {
+                    var id = (SerializableDefinitionId)item.Content.GetId();
+                    MyFixedPoint amount;
+                    items.TryGetValue(id, out amount);
+                    amount += item.Amount;
+                    items[id] = amount;
+                }
+            }
+
+            foreach (var item in items)
+            {
+                ini.Set("Inventory", item.Key.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, ""), item.Value.ToIntSafe());
+            }
+            return ini.ToString();
+        }
+
+        internal bool CanItemsBeAdded(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
+        {
+            MyPhysicalItemDefinition physItem;
+            if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(itemDefinition, out physItem))
+            {
+                volumeToBeMoved = 0;
+                massToBeMoved = 0;
+                return false;
+            }
+            volumeToBeMoved = amount * physItem.Volume;
+            massToBeMoved = amount * physItem.Mass;
+            return (!IsConstrained || !(volumeToBeMoved + VirtualVolume > MaxVolume)) && !(massToBeMoved + VirtualMass > MaxMass);
+        }
+
+        internal MyFixedPoint ComputeAmountThatFits(MyDefinitionId contentId, bool forceIntegralAmount = false)
+        {
+            if (!IsConstrained)
+            {
+                return MyFixedPoint.MaxValue;
+            }
+            MyPhysicalItemDefinition physItem;
+            if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(contentId, out physItem))
+            {
+                return MyFixedPoint.Zero;
+            }
+            MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)VirtualVolume) / (double)physItem.Volume), 0);
+            MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)VirtualMass) / (double)physItem.Mass), 0);
+            MyFixedPoint myFixedPoint = MyFixedPoint.Min(a, b);
+            if (physItem.HasIntegralAmounts || forceIntegralAmount)
+            {
+                myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
+            }
+            return myFixedPoint;
+        }
+
+        internal MyFixedPoint ComputeAmountThatCouldFit(MyDefinitionId contentId, bool forceIntegralAmount = false, float volumeReserved = 0f, float massReserved = 0f)
+        {
+            if (!IsConstrained)
+            {
+                return MyFixedPoint.MaxValue;
+            }
+            MyPhysicalItemDefinition physItem;
+            if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(contentId, out physItem))
+            {
+                return MyFixedPoint.Zero;
+            }
+            MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)volumeReserved) / (double)physItem.Volume), 0);
+            MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)massReserved) / (double)physItem.Mass), 0);
+            MyFixedPoint myFixedPoint = MyFixedPoint.Min(a, b);
+            if (physItem.HasIntegralAmounts || forceIntegralAmount)
+            {
+                myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
+            }
+            return myFixedPoint;
+        }
+    }
+}
