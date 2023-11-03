@@ -14,7 +14,7 @@ using VRage.Utils;
 
 namespace CargoSorter
 {
-    [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
+    [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
     public class CargoSorterSessionComponent : MySessionComponentBase
     {
         public static CargoSorterSessionComponent Instance { get; private set; }
@@ -29,6 +29,11 @@ namespace CargoSorter
 
         public override void LoadData()
         {
+            if (Util.IsDedicatedServer)
+            {
+                return;
+            }
+
             MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
 
             Config = CargoSorterConfiguration.LoadSettings();
@@ -451,6 +456,10 @@ namespace CargoSorter
 
         protected override void UnloadData()
         {
+            if (Util.IsDedicatedServer)
+            {
+                return;
+            }
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             Instance = null;
         }
