@@ -122,12 +122,21 @@ namespace CargoSorter
 
                 workData.Inventories.SortNoAlloc((InventoryInfo x, InventoryInfo y) =>
                 {
-                    var comparison = x.Priority.CompareTo(y.Priority);
-                    if (comparison == 0)
+                    if (x.TypeRequests.HasFlag(TypeRequests.Special) && !y.TypeRequests.HasFlag(TypeRequests.Special))
                     {
-                        x.RealInventory?.Entity?.EntityId.CompareTo(y.RealInventory?.Entity?.EntityId);
+                        return -1;
                     }
-                    return comparison;
+                    else if (!x.TypeRequests.HasFlag(TypeRequests.Special) && y.TypeRequests.HasFlag(TypeRequests.Special))
+                    {
+                        return 1;
+                    }
+
+                    var comparison = x.Priority.CompareTo(y.Priority);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+                    return x.RealInventory?.Entity?.EntityId.CompareTo(y.RealInventory?.Entity?.EntityId) ?? -1;
                 });
 
                 BuildExcessItemMovement(workData);
@@ -180,6 +189,7 @@ namespace CargoSorter
         }
         private void BuildExcessItemMovement(CargoSorterWorkData workData)
         {
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Removing excess items");
             List<MyDefinitionId> inventoryKeys = new List<MyDefinitionId>();
             for (int sourceInvIndex = 0; sourceInvIndex < workData.Inventories.Count; sourceInvIndex++)
             {
@@ -239,6 +249,7 @@ namespace CargoSorter
         }
         private void BuildDesiredItemMovement(CargoSorterWorkData workData)
         {
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
             List<MyDefinitionId> inventoryKeys = new List<MyDefinitionId>();
             for (int sourceInvIndex = workData.Inventories.Count - 1; sourceInvIndex >= 0; sourceInvIndex--)
             {
@@ -258,6 +269,12 @@ namespace CargoSorter
                     var destInventory = workData.Inventories[destInvIndex];
                     if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInvIndex == sourceInvIndex)
                     {
+                        continue;
+                    }
+
+                    if (sourceInventory.TypeRequests.HasFlag(TypeRequests.Special) && (!Config.AllowSpecialSteal || !destInventory.TypeRequests.HasFlag(TypeRequests.Special)))
+                    {
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
                         continue;
                     }
 
@@ -303,6 +320,7 @@ namespace CargoSorter
                 return -currentValue;
             }
             MyFixedPoint virtualAmount;
+            var percentFull = (float)inventoryInfo.VirtualVolume / (float)inventoryInfo.MaxVolume;
             switch (inventoryInfo.TypeRequests)
             {
                 case TypeRequests.Nothing:
@@ -313,10 +331,21 @@ namespace CargoSorter
                         return -currentValue;
                     }
                     inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
-                    return (float)inventoryInfo.VirtualVolume / (float)inventoryInfo.MaxVolume > 0.7f
+                    return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull < 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
                         ? virtualAmount
-                        : inventoryInfo.ComputeAmountThatCouldFit(definitionId, true, (float)inventoryInfo.MaxVolume * 0.2f, (float)inventoryInfo.MaxMass * 0.2f) - virtualAmount;
+                        : inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                        (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
+                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount;
                 case TypeRequests.AssemblerIngots:
+                    // If either inventory is too full, it doesn't matter which inventory it is - empty it.
+                    // This can cause repulls but is better than halting all production because a refinery
+                    // is pushing ingots it doesn't want into the assembler.
+                    if (percentFull > 0.9)
+                    {
+                        return -currentValue;
+                    }
+
+                    // Make sure the output inventory is clear in normal operation.
                     var assembler = inventoryInfo.RealInventory?.Entity as IMyAssembler;
                     if (assembler != null)
                     {
@@ -331,7 +360,7 @@ namespace CargoSorter
                                 break;
                         }
 
-                        if (constraintToCheck != null && constraintToCheck.ConstrainedIds.Contains(definitionId) && (double)inventoryInfo.VirtualVolume / (double)inventoryInfo.MaxVolume < 0.8)
+                        if (constraintToCheck != null && constraintToCheck.ConstrainedIds.Contains(definitionId) && percentFull < Config.EmptyAssemblerPercent)
                         {
                             return MyFixedPoint.Zero;
                         }
@@ -347,23 +376,26 @@ namespace CargoSorter
                             return MyFixedPoint.Zero;
                         }
                     }
-                    return (double)inventoryInfo.VirtualVolume / (double)inventoryInfo.MaxVolume < 0.8 ? currentValue : -currentValue;
+                    return percentFull < Config.EmptyRefineryPercent ? MyFixedPoint.Zero : -currentValue;
                 case TypeRequests.GasTankBottles:
                     return -currentValue;
                 case TypeRequests.SorterItems:
                     var sorter = inventoryInfo.RealInventory?.Entity as IMyConveyorSorter;
-                    return sorter != null && sorter.DrainAll ? currentValue : -currentValue;
+                    return sorter != null && sorter.DrainAll ? MyFixedPoint.Zero : -currentValue;
                 case TypeRequests.ReactorFuel:
                     var reactor = inventoryInfo.RealInventory?.Entity as IMyReactor;
                     if (reactor != null)
                     {
-                        var expectedAmount = (MyFixedPoint)((reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? 400f : 100f) * reactor.PowerOutputMultiplier);
+                        var expectedAmount = (MyFixedPoint)((float)(reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel) * reactor.PowerOutputMultiplier);
                         inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
                         return virtualAmount < expectedAmount * 0.5f ? expectedAmount - virtualAmount : virtualAmount;
                     }
                     return MyFixedPoint.Zero;
                 case TypeRequests.WeaponAmmo:
                     return inventoryInfo.ComputeAmountThatFits(definitionId);
+                case TypeRequests.Special:
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
+                    return GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue);
                 default:
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
@@ -372,17 +404,44 @@ namespace CargoSorter
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Tools) && allTools.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
 
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special))
+                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
                     {
-                        MyFixedPoint desiredAmount;
-                        if (inventoryInfo.SpecialRequests.TryGetValue(definitionId, out desiredAmount))
-                        {
-                            inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
-                            return MyFixedPoint.Min(inventoryInfo.ComputeAmountThatFits(definitionId, true), desiredAmount - virtualAmount);
-                        }
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
+                        return GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue);
                     }
                     return -currentValue;
             }
+        }
+
+        private static MyFixedPoint GetSpecialRequestAmount(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue)
+        {
+            MyFixedPoint desiredAmount;
+            if (inventoryInfo.Requests.TryGetValue(definitionId, out desiredAmount))
+            {
+                bool limitedFlag = false;
+                bool minimumFlag = false;
+
+                if (desiredAmount < MyFixedPoint.MaxValue)
+                {
+                    limitedFlag = (desiredAmount.RawValue & InventoryInfo.FixedPointFlagSpecialLimited.RawValue) != 0;
+                    minimumFlag = (desiredAmount.RawValue & InventoryInfo.FixedPointFlagSpecialMinimum.RawValue) != 0;
+
+                    if (limitedFlag || minimumFlag) // Clear out the flags so calculations can be correct.
+                    {
+                        desiredAmount = MyFixedPoint.Floor(desiredAmount);
+                    }
+                }
+
+                MyFixedPoint virtualAmount;
+                inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+
+                if ((!limitedFlag && !minimumFlag) || (limitedFlag && virtualAmount > desiredAmount) || (minimumFlag && virtualAmount < desiredAmount))
+                {
+                    return MyFixedPoint.Min(inventoryInfo.ComputeAmountThatFits(definitionId, true), desiredAmount - virtualAmount);
+                }
+                return MyFixedPoint.Zero;
+            }
+            return -currentValue;
         }
 
         private static void AppendInventoryOperation(CargoSorterWorkData workData, InventoryMovement operation)

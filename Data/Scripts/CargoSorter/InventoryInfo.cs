@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
@@ -14,9 +15,12 @@ namespace CargoSorter
 {
     public class InventoryInfo
     {
+        public static readonly MyFixedPoint FixedPointFlagSpecialMinimum = MyFixedPoint.SmallestPossibleValue * (1 << 0x3);
+        public static readonly MyFixedPoint FixedPointFlagSpecialLimited = MyFixedPoint.SmallestPossibleValue * (1 << 0x4);
+
         public byte Priority;
         public TypeRequests TypeRequests;
-        public Dictionary<MyDefinitionId, MyFixedPoint> SpecialRequests;
+        public Dictionary<MyDefinitionId, MyFixedPoint> Requests;
         public Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
         public MyFixedPoint VirtualVolume;
         public MyFixedPoint VirtualMass;
@@ -55,35 +59,44 @@ namespace CargoSorter
                 return;
             }
 
-            if (Block.DisplayNameText.Contains(config.OreContainerKeyword))
-            {
-                TypeRequests |= TypeRequests.Ores;
-            }
-            if (Block.DisplayNameText.Contains(config.IngotContainerKeyword))
-            {
-                TypeRequests |= TypeRequests.Ingots;
-            }
-            if (Block.DisplayNameText.Contains(config.ComponentContainerKeyword))
-            {
-                TypeRequests |= TypeRequests.Components;
-            }
-            if (Block.DisplayNameText.Contains(config.ToolContainerKeyword))
-            {
-                TypeRequests |= TypeRequests.Tools;
-            }
-            if (Block.DisplayNameText.Contains(config.AmmoContainerKeyword))
-            {
-                TypeRequests |= TypeRequests.Ammo;
-            }
-            if (Block.DisplayNameText.Contains(config.BottleContainerKeyword))
-            {
-                TypeRequests |= TypeRequests.Bottles;
-            }
             if (Block.DisplayNameText.Contains(config.SpecialContainerKeyword))
             {
-                TypeRequests |= TypeRequests.Special;
-                SpecialRequests = new Dictionary<MyDefinitionId, MyFixedPoint>();
-                ParseSpecialRequests(Block, SpecialRequests);
+                TypeRequests = TypeRequests.Special;
+                Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                ParseCustomDataRequests(Block, Requests);
+            }
+            else
+            {
+                if (Block.DisplayNameText.Contains(config.OreContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Ores;
+                }
+                if (Block.DisplayNameText.Contains(config.IngotContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Ingots;
+                }
+                if (Block.DisplayNameText.Contains(config.ComponentContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Components;
+                }
+                if (Block.DisplayNameText.Contains(config.ToolContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Tools;
+                }
+                if (Block.DisplayNameText.Contains(config.AmmoContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Ammo;
+                }
+                if (Block.DisplayNameText.Contains(config.BottleContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Bottles;
+                }
+                if (Block.DisplayNameText.Contains(config.LimitedContainerKeyword))
+                {
+                    TypeRequests |= TypeRequests.Limited;
+                    Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                    ParseCustomDataRequests(Block, Requests);
+                }
             }
 
             var priorityStartIndex = Block.DisplayNameText.IndexOf("[P", StringComparison.OrdinalIgnoreCase);
@@ -152,7 +165,7 @@ namespace CargoSorter
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
         }
 
-        private void ParseSpecialRequests(IMyCubeBlock block, Dictionary<MyDefinitionId, MyFixedPoint> specialRequests)
+        private void ParseCustomDataRequests(IMyCubeBlock block, Dictionary<MyDefinitionId, MyFixedPoint> specialRequests)
         {
             var terminalBlock = block as IMyTerminalBlock;
             if (!Util.IsValid(terminalBlock))
@@ -202,19 +215,40 @@ namespace CargoSorter
                 var value = ini.Get(iniKey);
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
-                if (valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(valueString))
                 {
-                    specialRequests[definitionId] = MyFixedPoint.MaxValue;
-                    continue;
+                    specialRequests[definitionId] = 0;
                 }
-
-                int itemCount;
-                if (!int.TryParse(valueString, out itemCount) || itemCount < 0)
+                else
                 {
-                    continue;
-                }
+                    if (valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
+                    {
+                        specialRequests[definitionId] = MyFixedPoint.MaxValue;
+                        continue;
+                    }
 
-                specialRequests[definitionId] = (MyFixedPoint)itemCount;
+                    var lastChar = valueString[valueString.Length - 1];
+                    int itemCount;
+
+                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                    {
+                        continue;
+                    }
+
+                    var fixedPointValue = (MyFixedPoint)itemCount;
+
+                    if (lastChar == 'L' || lastChar == 'l')
+                    {
+                        fixedPointValue += FixedPointFlagSpecialLimited;
+
+                    }
+                    if (lastChar == 'M' || lastChar == 'm')
+                    {
+                        fixedPointValue += FixedPointFlagSpecialMinimum;
+                    }
+
+                    specialRequests[definitionId] = fixedPointValue;
+                }
             }
         }
 
