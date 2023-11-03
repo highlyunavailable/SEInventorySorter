@@ -19,7 +19,7 @@ Special container tag:
 
 Broad categories and special containers can be combined: `Cargo Container Special, Bottles and Tools` is valid.
 
-Priorities can be from 0 to 255 and are specified with an additional `[P#]` in the container name, and lower numbers are higher priority: `Cargo Container Ore P10` is filled before `Cargo Container Ore P20`.
+Priorities can be from 0 to 255 and are specified with an additional `[P#]` in the container name, and lower numbers are higher priority: `Cargo Container Ore [P10]` is filled before `Cargo Container Ore [P20]`.
 
 Special containers use Custom Data to select items to fill the container with.
 
