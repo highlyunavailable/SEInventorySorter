@@ -6,6 +6,8 @@ It's a lot like [url=https://steamcommunity.com/sharedfiles/filedetails/?id=1226
 
 [h2]Usage[/h2]
 
+Add "[nosort]" to the name of a grid to exclude it from sorting.
+
 Type container category names:
 
 [list]

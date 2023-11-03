@@ -6,6 +6,8 @@ It's a lot like [Isy's Inventory Manager](https://steamcommunity.com/sharedfiles
 
 ## Usage
 
+Add "[nosort]" to the name of a grid to exclude it from sorting.
+
 Type container category names:
 
 * `Ores`

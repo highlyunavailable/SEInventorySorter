@@ -110,7 +110,7 @@ namespace CargoSorter
                 List<IMySlimBlock> blocks = new List<IMySlimBlock>();
                 foreach (var cubeGrid in workData.Grids)
                 {
-                    if (!Util.IsValid(cubeGrid))
+                    if (!Util.IsValid(cubeGrid) || cubeGrid.CustomName.Contains("[nosort]"))
                     {
                         continue;
                     }
