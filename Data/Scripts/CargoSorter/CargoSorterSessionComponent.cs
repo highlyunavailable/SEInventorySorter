@@ -11,6 +11,7 @@ using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.Utils;
+using VRageMath;
 
 namespace CargoSorter
 {
@@ -83,23 +84,21 @@ namespace CargoSorter
 
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
-            if (messageText.StartsWith("/clownsort"))
+            if (!messageText.StartsWith("/clownsort"))
             {
-                sendToOthers = false;
-                var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
-                if (shipController == null)
-                {
-                    return;
-                }
-
-                long localPlayerId = MyAPIGateway.Session.LocalHumanPlayer.IdentityId;
-                var workData = new CargoSorterWorkData();
-                shipController.CubeGrid.GetGridGroup(GridLinkTypeEnum.Logical).GetGrids(workData.Grids);
-
-                var inventorySortTask = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
-
                 return;
             }
+            sendToOthers = false;
+            var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
+            if (shipController == null)
+            {
+                MyVisualScriptLogicProvider.SendChatMessageColored("You must be seated on a grid to sort!", Color.Red, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                return;
+            }
+
+            long localPlayerId = MyAPIGateway.Session.LocalHumanPlayer.IdentityId;
+            var workData = new CargoSorterWorkData(shipController.CubeGrid);
+            MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
         }
 
         private void SortInventoryAction(WorkData data)
@@ -108,15 +107,16 @@ namespace CargoSorter
             {
                 var workData = (CargoSorterWorkData)data;
                 List<IMySlimBlock> blocks = new List<IMySlimBlock>();
-                foreach (var cubeGrid in workData.Grids)
+                List<IMyCubeGrid> excludedGrids = new List<IMyCubeGrid>();
+
+                var tree = new GridConnectorTree(workData.RootGrid);
+
+                var nodes = tree.GatherRecursive(c => !c.DisplayNameText.Contains("[nosort]"));
+
+                foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                 {
-                    if (!Util.IsValid(cubeGrid) || cubeGrid.CustomName.Contains("[nosort]"))
-                    {
-                        continue;
-                    }
                     blocks.Clear();
-                    blocks.EnsureCapacity(((MyCubeGrid)cubeGrid).BlocksCount);
-                    cubeGrid.GetBlocks(blocks);
+                    cubeGrid.GetBlocks(blocks, block => block.FatBlock != null && Util.IsValid(block.FatBlock) && block.FatBlock.GetInventory() != null && !IsIgnored(block.FatBlock));
                     GatherInventory(blocks, workData);
                 }
 
@@ -147,25 +147,16 @@ namespace CargoSorter
             catch (Exception ex)
             {
                 MyLog.Default.WriteLineAndConsole($"CargoSort: Sort failed with exception:\n{ex}");
+                MyVisualScriptLogicProvider.SendChatMessageColored($"Internal error: {ex.Message}", Color.Red, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
             }
         }
         private void GatherInventory(List<IMySlimBlock> blocks, CargoSorterWorkData workData)
         {
             foreach (var block in blocks)
             {
-                if (block.FatBlock == null)
+                for (int i = 0; i < block.FatBlock.InventoryCount; i++)
                 {
-                    continue;
-                }
-                var fatBlock = block.FatBlock;
-                if (!Util.IsValid(fatBlock) || fatBlock.GetInventory() == null || IsIgnored(fatBlock))
-                {
-                    continue;
-                }
-
-                for (int i = 0; i < fatBlock.InventoryCount; i++)
-                {
-                    var inventory = fatBlock.GetInventory(i) as MyInventory;
+                    var inventory = block.FatBlock.GetInventory(i) as MyInventory;
                     var inventoryInfo = new InventoryInfo(inventory);
                     workData.Inventories.Add(inventoryInfo);
                 }
@@ -223,16 +214,15 @@ namespace CargoSorter
                             continue;
                         }
                         var sourceAmountExcess = -CalculateAmountWanted(sourceInventory, virtualItemKey, virtualItemValue);
-
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Excess: {sourceAmountExcess}");
                         if (sourceAmountExcess > MyFixedPoint.Zero)
                         {
                             MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue), sourceAmountExcess);
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
                             if (amountToBeMoved <= MyFixedPoint.Zero || !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
                             {
                                 continue;
                             }
-
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
 
                             MyFixedPoint volumeToBeMoved;
                             MyFixedPoint massToBeMoved;
@@ -326,16 +316,16 @@ namespace CargoSorter
                 case TypeRequests.Nothing:
                     return -currentValue;
                 case TypeRequests.GasGeneratorOre:
-                    if (allBottles.Contains(definitionId) || inventoryInfo.Constraint == null || !inventoryInfo.Constraint.ConstrainedIds.Contains(definitionId))
+                    if (allBottles.Contains(definitionId))
                     {
                         return -currentValue;
                     }
                     inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
-                    return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull < 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
-                        ? virtualAmount
-                        : inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                    return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
+                        ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
                         (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
-                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount;
+                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
+                        : MyFixedPoint.Zero;
                 case TypeRequests.AssemblerIngots:
                     // If either inventory is too full, it doesn't matter which inventory it is - empty it.
                     // This can cause repulls but is better than halting all production because a refinery
@@ -481,10 +471,22 @@ namespace CargoSorter
             //    }
             //}
 
-            ExecuteMovementData(workData);
+            var transferRequests = ExecuteMovementData(workData);
+            if (Config.ShowProgressNotifications)
+            {
+                if (transferRequests == 0)
+                {
+                    MyVisualScriptLogicProvider.SendChatMessageColored("No changes made.", Color.White, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                }
+                else
+                {
+                    MyVisualScriptLogicProvider.SendChatMessageColored($"{transferRequests} transfers requested.", Color.White, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                }
+            }
         }
-        private void ExecuteMovementData(CargoSorterWorkData workData)
+        private int ExecuteMovementData(CargoSorterWorkData workData)
         {
+            int transferRequests = 0;
             List<KeyValuePair<uint, MyFixedPoint>> itemOps = new List<KeyValuePair<uint, MyFixedPoint>>();
             foreach (var movement in workData.MovementData)
             {
@@ -504,6 +506,7 @@ namespace CargoSorter
                     }
                     var toTransfer = MyFixedPoint.Min(item.Amount, movement.Amount);
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
+                    transferRequests++;
                     needToMove -= toTransfer;
                     if (needToMove <= MyFixedPoint.Zero)
                     {
@@ -511,6 +514,7 @@ namespace CargoSorter
                     }
                 }
             }
+            return transferRequests;
         }
 
         protected override void UnloadData()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ProtoBuf;
 using Sandbox.Definitions;
+using Sandbox.Game;
 using Sandbox.ModAPI;
 using VRage;
 using VRage.Game;
@@ -42,6 +43,7 @@ namespace CargoSorter
         public int ExpectedLargeGridReactorFuel { get; set; }
         public int ExpectedSmallGridReactorFuel { get; set; }
         public bool AllowSpecialSteal { get; set; }
+        public bool ShowProgressNotifications { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
@@ -67,6 +69,7 @@ namespace CargoSorter
                 catch (Exception e)
                 {
                     MyLog.Default.WriteLineAndConsole($"CargoSort: Failed to load mod settings: {e.Message}\n{e.StackTrace}");
+                    MyVisualScriptLogicProvider.SendChatMessageColored($"Failed to load mod settings, resetting to default!", Color.Red, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
                 }
 
                 MyAPIGateway.Utilities.WriteBinaryFileInLocalStorage(ConfigFileName + ".old", typeof(CargoSorterConfiguration));
@@ -128,6 +131,7 @@ namespace CargoSorter
             ExpectedLargeGridReactorFuel = 100;
             ExpectedSmallGridReactorFuel = 25;
             AllowSpecialSteal = true;
+            ShowProgressNotifications = false;
         }
     }
 }

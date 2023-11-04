@@ -6,7 +6,11 @@ It's a lot like [Isy's Inventory Manager](https://steamcommunity.com/sharedfiles
 
 ## Usage
 
-Add "[nosort]" to the name of a grid to exclude it from sorting.
+You must be seated on a grid to run the sort command.
+
+Add `[nosort]` to the name of a grid to exclude it and any grids in its mechanical group (connected by pistons, rotors, or hinges) from sorting. The grid you are seated on when running the sort command must not be excluded by this rule.
+
+Add `[nosort]` to the name of a connector in the mechanical group of the grid you are sorting from to exclude any attached grids from sorting.
 
 Type container category names:
 
@@ -58,7 +62,7 @@ Special containers can have four different modes on a per-item-basis:
 
 There are a few special cases that are also worth mentioning for specific block types. To override these behaviors, add a Special tag or use one of the Locked keywords in the name: `Lock` (or something longer, like `Locked` works too), `Seat`, `Control Station`, `Hidden`, `!manual` are all things that that will make the sorter ignore a block.
 
-* Ice is added to or removed from O2/H2 generators to maintain around 70-80% fullness, but bottles will always be moved from any tanks to a Bottles container if one exists.
+* Ice is added to or removed from O2/H2 generators to maintain around 70-80% fullness, but bottles will always be moved from generators to a Bottles container if one exists.
 * Bottles will always be moved from any tanks to a Bottles container if one exists.
 * Refinery inputs are left alone, but outputs are fully emptied if they exceed 20% fullness.
 * If an assembler is in disassemble mode, its input will be emptied, but if it's in assemble mode its output will be emptied. The opposite inventory will always be left alone.
@@ -95,7 +99,16 @@ The default looks like this:
   <ExpectedLargeGridReactorFuel>100</ExpectedLargeGridReactorFuel>
   <ExpectedSmallGridReactorFuel>25</ExpectedSmallGridReactorFuel>
   <AllowSpecialSteal>true</AllowSpecialSteal>
+  <ShowProgressNotifications>false</ShowProgressNotifications>
 </CargoSorterConfiguration>
 ```
 
 All keywords can be changed (e.g. `Ammo` to `Munitions`) as well as a few different other options. If the configuration is not valid, it will be reset to the default on next load, and will only take effect via exiting to main menu and reloading/reconnecting.
+
+* EmptyRefineryPercent: The percent at which a refinery's output is emptied if necessary.
+* EmptyAssemblerPercent: The percent at which a an assembler's output (assemble mode) or input (disassemble mode) is emptied if it starts to fill. There is also a fixed  emergency switch where an assembler will be emptied at 90% full of either inventory to prevent clogging.
+* GasGeneratorFillPercent: The amount of ice to put in each O2/H2 generator. Conveyor pulling will override this if it is set too low (around 30%) but it's good to leave some space to be able to fill bottles easily.
+* ExpectedLargeGridReactorFuel: The kilograms of U that will be put in a Large Grid reactor. This value is multiplied by the reactor's Power Output Multiplier, since automatic conveyor pull will cause this to be overwritten anyway if the value is too low.
+* ExpectedLargeGridReactorFuel: The kilograms of U that will be put in a Small Grid reactor. This value is multiplied by the reactor's Power Output Multiplier, since automatic conveyor pull will cause this to be overwritten anyway if the value is too low.
+* AllowSpecialSteal: Allow special containers to take from each other if their priority allows it.
+* ShowProgressNotifications: Put a message in chat when sorting is finished.
