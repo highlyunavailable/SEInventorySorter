@@ -69,7 +69,6 @@ namespace CargoSorter
                 catch (Exception e)
                 {
                     MyLog.Default.WriteLineAndConsole($"CargoSort: Failed to load mod settings: {e.Message}\n{e.StackTrace}");
-                    MyVisualScriptLogicProvider.SendChatMessageColored($"Failed to load mod settings, resetting to default!", Color.Red, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
                 }
 
                 MyAPIGateway.Utilities.WriteBinaryFileInLocalStorage(ConfigFileName + ".old", typeof(CargoSorterConfiguration));

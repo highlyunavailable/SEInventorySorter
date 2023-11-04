@@ -92,7 +92,7 @@ namespace CargoSorter
             var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
             if (shipController == null)
             {
-                MyVisualScriptLogicProvider.SendChatMessageColored("You must be seated on a grid to sort!", Color.Red, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to sort!");
                 return;
             }
 
@@ -151,7 +151,7 @@ namespace CargoSorter
             catch (Exception ex)
             {
                 MyLog.Default.WriteLineAndConsole($"CargoSort: Sort failed with exception:\n{ex}");
-                MyVisualScriptLogicProvider.SendChatMessageColored($"Internal error: {ex.Message}", Color.Red, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Internal error: {ex.Message}");
             }
         }
         private void GatherInventory(List<IMySlimBlock> blocks, CargoSorterWorkData workData)
@@ -480,11 +480,11 @@ namespace CargoSorter
             {
                 if (transferRequests == 0)
                 {
-                    MyVisualScriptLogicProvider.SendChatMessageColored("No changes made.", Color.White, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "No transfers needed.");
                 }
                 else
                 {
-                    MyVisualScriptLogicProvider.SendChatMessageColored($"{transferRequests} transfers requested.", Color.White, "Sorter", MyAPIGateway.Session.LocalHumanPlayer.IdentityId);
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequests} transfers requested.");
                 }
             }
         }
