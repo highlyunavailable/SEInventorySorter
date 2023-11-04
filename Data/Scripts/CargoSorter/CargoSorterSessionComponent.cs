@@ -106,7 +106,6 @@ namespace CargoSorter
             try
             {
                 var workData = (CargoSorterWorkData)data;
-                List<IMySlimBlock> blocks = new List<IMySlimBlock>();
                 List<IMyCubeGrid> excludedGrids = new List<IMyCubeGrid>();
 
                 var tree = new GridConnectorTree(workData.RootGrid);
@@ -119,13 +118,12 @@ namespace CargoSorter
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                 {
-                    blocks.Clear();
-                    cubeGrid.GetBlocks(blocks, block => block.FatBlock != null && Util.IsValid(block.FatBlock) && block.FatBlock.GetInventory() != null && !IsIgnored(block.FatBlock));
-                    GatherInventory(blocks, workData);
+                    GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
                 }
 
                 workData.Inventories.SortNoAlloc((InventoryInfo x, InventoryInfo y) =>
                 {
+                    // Special containers always go to the top
                     if (x.TypeRequests.HasFlag(TypeRequests.Special) && !y.TypeRequests.HasFlag(TypeRequests.Special))
                     {
                         return -1;
@@ -135,13 +133,29 @@ namespace CargoSorter
                         return 1;
                     }
 
+                    // Priority applies next
                     var comparison = x.Priority.CompareTo(y.Priority);
                     if (comparison != 0)
                     {
                         return comparison;
                     }
-                    return x.RealInventory?.Entity?.EntityId.CompareTo(y.RealInventory?.Entity?.EntityId) ?? -1;
+
+                    // Sort by name so that the first items in the terminal tend to fill up first
+                    comparison = string.Compare(x.Block.DisplayNameText, y.Block.DisplayNameText);
+                    if (comparison != 0)
+                    {
+                        comparison = string.Compare(x.Block.DisplayNameText, y.Block.DisplayNameText);
+                        return comparison;
+                    }
+
+                    // Use the entity ID as a fallback so it's fairly stable ordering
+                    return x.Block.EntityId.CompareTo(y.Block.EntityId);
                 });
+
+                //foreach (var item in workData.Inventories)
+                //{
+                //    MyLog.Default.WriteLineAndConsole($"CargoSort: {item.Block.DisplayNameText}");
+                //}
 
                 BuildExcessItemMovement(workData);
                 BuildDesiredItemMovement(workData);
@@ -154,28 +168,28 @@ namespace CargoSorter
                 MyAPIGateway.Utilities.ShowMessage("Sorter", $"Internal error: {ex.Message}");
             }
         }
-        private void GatherInventory(List<IMySlimBlock> blocks, CargoSorterWorkData workData)
+
+        private void GatherInventory(IEnumerable<IMyTerminalBlock> blocks, CargoSorterWorkData workData)
         {
             foreach (var block in blocks)
             {
-                for (int i = 0; i < block.FatBlock.InventoryCount; i++)
+                if (!Util.IsValid(block) || block.InventoryCount == 0 || !block.HasLocalPlayerAccess() || IsIgnored(block))
                 {
-                    var inventory = block.FatBlock.GetInventory(i) as MyInventory;
+                    continue;
+                }
+                for (int i = 0; i < block.InventoryCount; i++)
+                {
+                    var inventory = block.GetInventory(i) as MyInventory;
                     var inventoryInfo = new InventoryInfo(inventory);
                     workData.Inventories.Add(inventoryInfo);
                 }
             }
         }
-        private bool IsIgnored(IMyCubeBlock fatBlock)
+        private bool IsIgnored(IMyTerminalBlock block)
         {
-            var terminalBlock = fatBlock as IMyTerminalBlock;
-            if (terminalBlock != null && !terminalBlock.HasLocalPlayerAccess())
-            {
-                return true;
-            }
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
-                if (fatBlock.DisplayNameText.Contains(item))
+                if (block.DisplayNameText.Contains(item))
                 {
                     return true;
                 }
@@ -210,11 +224,13 @@ namespace CargoSorter
                     var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
 
-                    foreach (var virtualItemKey in inventoryKeys)
+                    for (int invKeyIndex = inventoryKeys.Count - 1; invKeyIndex >= 0; invKeyIndex--)
                     {
+                        var virtualItemKey = inventoryKeys[invKeyIndex];
                         MyFixedPoint virtualItemValue;
-                        if (!sourceInventory.VirtualInventory.TryGetValue(virtualItemKey, out virtualItemValue))
+                        if (!sourceInventory.VirtualInventory.TryGetValue(virtualItemKey, out virtualItemValue) || virtualItemValue <= MyFixedPoint.Zero)
                         {
+                            inventoryKeys.RemoveAtFast(invKeyIndex);
                             continue;
                         }
                         var sourceAmountExcess = -CalculateAmountWanted(sourceInventory, virtualItemKey, virtualItemValue);
@@ -272,7 +288,7 @@ namespace CargoSorter
                         continue;
                     }
 
-                    if (sourceInventory.Priority <= destInventory.Priority)
+                    if (sourceInventory.Priority <= destInventory.Priority || sourceInventory.VirtualInventory.Count == 0)
                     {
                         break;
                     }
@@ -280,11 +296,13 @@ namespace CargoSorter
                     var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
 
-                    foreach (var virtualItemKey in inventoryKeys)
+                    for (int invKeyIndex = inventoryKeys.Count - 1; invKeyIndex >= 0; invKeyIndex--)
                     {
+                        var virtualItemKey = inventoryKeys[invKeyIndex];
                         MyFixedPoint virtualItemValue;
-                        if (!sourceInventory.VirtualInventory.TryGetValue(virtualItemKey, out virtualItemValue))
+                        if (!sourceInventory.VirtualInventory.TryGetValue(virtualItemKey, out virtualItemValue) || virtualItemValue <= MyFixedPoint.Zero)
                         {
+                            inventoryKeys.RemoveAtFast(invKeyIndex);
                             continue;
                         }
                         MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue), virtualItemValue);
