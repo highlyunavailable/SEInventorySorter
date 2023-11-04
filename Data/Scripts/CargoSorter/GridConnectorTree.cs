@@ -104,14 +104,7 @@ namespace CargoSorter
                     {
                         continue;
                     }
-
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: recursing into {branch.Key.DisplayNameText}");
-
                     branch.Value.GatherRecursiveInternal(nodes, filter);
-                }
-                else
-                {
-                    nodes.Remove(branch.Value);
                 }
             }
         }

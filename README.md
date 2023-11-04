@@ -8,10 +8,6 @@ It's a lot like [Isy's Inventory Manager](https://steamcommunity.com/sharedfiles
 
 You must be seated on a grid to run the sort command.
 
-Add `[nosort]` to the name of a grid to exclude it and any grids in its mechanical group (connected by pistons, rotors, or hinges) from sorting. The grid you are seated on when running the sort command must not be excluded by this rule.
-
-Add `[nosort]` to the name of a connector in the mechanical group of the grid you are sorting from to exclude any attached grids from sorting.
-
 Type container category names:
 
 * `Ores`
@@ -69,6 +65,30 @@ There are a few special cases that are also worth mentioning for specific block 
 * Reactor fuel will be filled or removed to make the reactor contain around `100 * Power Output Multiplier` for Large Grid and `25 * Power Output Multiplier` for Small Grid.
 * Weapons will be fully filled with whatever ammo they want.
 * Sorters will not be emptied if they're in Drain All mode.
+
+## Excluding Grids
+
+Add `[nosort]` to the name of a *grid* to exclude it and any connected grids. Add `[nosort]` to the name of a *connector* to exclude any connected grids from sorting. 
+
+Exclusions by both grid name and connector name are transitive.
+
+For example, given this grid/connector topology, both Ship A and Ship B are excluded from sorting, if sorting is started from the Trade Station grid.
+```
+Trade Station (Trade Connector [nosort]) <-> (Docking Connector) Ship A (Hangar Connector 1) <-> (Docking Connector) Ship B
+```
+
+The same behavior would apply if the tag was in the ship name as well:
+```
+Trade Station (Trade Connector) <-> (Docking Connector) Ship A [nosort] (Hangar Connector 1) <-> (Docking Connector) Ship B
+```
+
+***Warning:*** If there are two or more connectors linking grids A and B, each connected connector on one of the grids _must_ be tagged with [nosort] especially if the connectors form a loop via other grids (e.g. Pistons or Hinges), or routes may form where sorting is allowed.
+
+A topology like this provides a route to the ship and will cause unexpected item movement:
+```
+Station (Connector A [nosort]) <-> (Docking Connector A) Ship grid
+        (Connector B)          <-> (Docking Connector B)
+```
 
 ## Configuration
 

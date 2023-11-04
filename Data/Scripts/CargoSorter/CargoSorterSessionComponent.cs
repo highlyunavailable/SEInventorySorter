@@ -111,7 +111,11 @@ namespace CargoSorter
 
                 var tree = new GridConnectorTree(workData.RootGrid);
 
-                var nodes = tree.GatherRecursive(c => !c.DisplayNameText.Contains("[nosort]"));
+                var nodes = tree.GatherRecursive(c =>
+                {
+                    return c.DisplayNameText?.Contains("[nosort]") == false &&
+                    c.OtherConnector?.CubeGrid?.CustomName?.Contains("[nosort]") == false;
+                });
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                 {
