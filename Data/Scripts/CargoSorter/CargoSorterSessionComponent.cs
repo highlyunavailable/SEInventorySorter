@@ -43,7 +43,7 @@ namespace CargoSorter
 
             foreach (var definition in MyDefinitionManager.Static.GetPhysicalItemDefinitions())
             {
-                if (!definition.AvailableInSurvival)
+                if (!definition.Enabled)
                 {
                     continue;
                 }
@@ -74,7 +74,7 @@ namespace CargoSorter
             }
             foreach (var definition in MyDefinitionManager.Static.GetHandItemDefinitions())
             {
-                if (!definition.AvailableInSurvival)
+                if (!definition.Enabled)
                 {
                     continue;
                 }
