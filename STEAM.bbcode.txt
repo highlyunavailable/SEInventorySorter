@@ -1,6 +1,6 @@
 [h1]Inventory Sorter[/h1]
 
-Sort command: /clownsort
+Sort command: /sort (case insensitive)
 
 It's a lot like [url=https://steamcommunity.com/sharedfiles/filedetails/?id=1226261795]Isy's Inventory Manager[/url] and uses a similar config language.
 
