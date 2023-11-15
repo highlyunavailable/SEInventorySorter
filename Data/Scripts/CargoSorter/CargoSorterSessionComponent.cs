@@ -84,7 +84,7 @@ namespace CargoSorter
 
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
-            if (!messageText.StartsWith("/clownsort"))
+            if (!messageText.StartsWith("/sort", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
