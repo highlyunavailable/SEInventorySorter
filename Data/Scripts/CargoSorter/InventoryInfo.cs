@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
@@ -9,7 +8,6 @@ using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.ObjectBuilders;
-using VRage.Utils;
 
 namespace CargoSorter
 {
@@ -183,6 +181,7 @@ namespace CargoSorter
                 }
                 else
                 {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{block.DisplayNameText}'");
                     return;
                 }
             }
@@ -202,13 +201,33 @@ namespace CargoSorter
                     continue;
                 }
                 MyDefinitionId definitionId;
-                if (!MyDefinitionId.TryParse(MyObjectBuilderType.LEGACY_TYPE_PREFIX + iniKey.Name, out definitionId) && !MyDefinitionId.TryParse(iniKey.Name, out definitionId))
+                MyPhysicalItemDefinition physItem;
+                if (MyDefinitionId.TryParse(MyObjectBuilderType.LEGACY_TYPE_PREFIX + iniKey.Name, out definitionId))
                 {
+                    MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem);
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid type '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
                     continue;
                 }
-                MyPhysicalItemDefinition physItem;
-                if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem))
+
+                if (physItem == null)
                 {
+                    if (MyDefinitionId.TryParse(iniKey.Name, out definitionId))
+                    {
+                        MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem);
+                    }
+                    else
+                    {
+                        MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid type '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
+                        continue;
+                    }
+                }
+
+                if (physItem == null)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
                     continue;
                 }
 
@@ -227,26 +246,25 @@ namespace CargoSorter
                         continue;
                     }
 
-                    var lastChar = valueString[valueString.Length - 1];
                     int itemCount;
-
                     if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                     {
+                        MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
                         continue;
                     }
 
                     var fixedPointValue = (MyFixedPoint)itemCount;
 
+                    var lastChar = valueString[valueString.Length - 1];
                     if (lastChar == 'L' || lastChar == 'l')
                     {
                         fixedPointValue += FixedPointFlagSpecialLimited;
 
                     }
-                    if (lastChar == 'M' || lastChar == 'm')
+                    else if (lastChar == 'M' || lastChar == 'm')
                     {
                         fixedPointValue += FixedPointFlagSpecialMinimum;
                     }
-
                     specialRequests[definitionId] = fixedPointValue;
                 }
             }
