@@ -10,6 +10,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRageMath;
 
@@ -28,6 +29,8 @@ namespace CargoSorter
         private readonly HashSet<MyDefinitionId> allTools = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allBottles = new HashSet<MyDefinitionId>();
 
+        private readonly Dictionary<string, MyDefinitionId> stringPhysicalItemMap = new Dictionary<string, MyDefinitionId>(StringComparer.InvariantCultureIgnoreCase);
+
         public override void LoadData()
         {
             if (Util.IsDedicatedServer)
@@ -43,10 +46,11 @@ namespace CargoSorter
 
             foreach (var definition in MyDefinitionManager.Static.GetPhysicalItemDefinitions())
             {
-                if (!definition.Enabled)
+                if (!definition.Enabled || !definition.Public)
                 {
                     continue;
                 }
+                MakeNormalizedId(definition);
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
@@ -74,12 +78,29 @@ namespace CargoSorter
             }
             foreach (var definition in MyDefinitionManager.Static.GetHandItemDefinitions())
             {
-                if (!definition.Enabled)
+                if (!definition.Enabled || !definition.Public)
                 {
                     continue;
                 }
+                MakeNormalizedId(definition);
                 allTools.Add(definition.PhysicalItemId);
             }
+        }
+
+        private void MakeNormalizedId(MyDefinitionBase definition)
+        {
+            var normalizedStringId = definition.Id.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, string.Empty, StringComparison.InvariantCultureIgnoreCase).ToLowerInvariant();
+            stringPhysicalItemMap[normalizedStringId] = definition.Id;
+        }
+
+        public bool TryGetNormalizedItemDefinition(string shortStringName, out MyDefinitionId definitionId)
+        {
+            if (stringPhysicalItemMap.TryGetValue(shortStringName, out definitionId))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private void OnMessageEntered(string messageText, ref bool sendToOthers)

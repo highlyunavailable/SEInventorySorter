@@ -201,31 +201,7 @@ namespace CargoSorter
                     continue;
                 }
                 MyDefinitionId definitionId;
-                MyPhysicalItemDefinition physItem;
-                if (MyDefinitionId.TryParse(MyObjectBuilderType.LEGACY_TYPE_PREFIX + iniKey.Name, out definitionId))
-                {
-                    MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem);
-                }
-                else
-                {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid type '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
-                    continue;
-                }
-
-                if (physItem == null)
-                {
-                    if (MyDefinitionId.TryParse(iniKey.Name, out definitionId))
-                    {
-                        MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem);
-                    }
-                    else
-                    {
-                        MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid type '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
-                        continue;
-                    }
-                }
-
-                if (physItem == null)
+                if (!CargoSorterSessionComponent.Instance.TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
                     continue;
