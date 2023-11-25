@@ -1,11 +1,8 @@
 [h1]Inventory Sorter[/h1]
-
-Sort command: /sort (case insensitive)
+Sort command: [b]/sort[/b] (case insensitive)
 
 It's a lot like [url=https://steamcommunity.com/sharedfiles/filedetails/?id=1226261795]Isy's Inventory Manager[/url] and uses a similar config language.
-
 [h2]Usage[/h2]
-
 You must be seated on a grid to run the sort command.
 
 Type container category names:
@@ -17,20 +14,17 @@ Type container category names:
 [*]Bottles
 [*]Tools
 [/list]
-
 Container tags that use CustomData to select items are:
 [list]
 [*]Special
 [*]Limited
 [/list]
-
 Special is an [b]exclusive[/b] tag - combining Special with another tag such as Tools will not work and the container will be treated as Special. Special containers use unique priority handling:
 [list]
 [*]Special containers are considered highest priority above all other blocks except other Special containers.
 [*]If the config option AllowSpecialSteal is true (the default), Special containers will pull items from other special containers if necessary, depending on their relative priority.
 [*]If the config option AllowSpecialSteal is false, Special containers will only remove excess items and pull in needed items from other non-Special containers.
 [/list]
-
 Limited is an [b]inclusive[/b] tag: Type container categories and Limited tagging can be combined. Cargo Container Limited, Bottles and Tools is valid and will try to contain all bottles, all tools, and any items specified in the CustomData. Priority affects limited containers normally and both limited and type containers participate in the same priority system.
 
 Priorities can be from 0 to 255 and are specified with an additional [P#] in the container name, and lower numbers are higher priority: Cargo Container Ore [P10] is filled before Cargo Container Ore [P20]. Not specifying a priority generally means that a container has the lowest possible priority. Unprioritized functional blocks such as O2/H2 Generators will adjust their own default priority to the highest possible priority to maintain fullness if possible, but any specified priority will override that with the specified value.
@@ -52,7 +46,6 @@ Component/GVK_SpecialPackage1=100M
 Component/ZoneChip=100
 Ingot/GVK_Relic_Tech=500L
 [/noparse][/code]
-
 Special containers can have four different modes on a per-item-basis:
 [list]
 [*]Normal: pulls in and stores the specified amount, removes any excess. Usage: item=100
@@ -60,7 +53,6 @@ Special containers can have four different modes on a per-item-basis:
 [*]Limit: Only removes items in excess of the specified value. Any value below the limit is kept, but more is not pulled in. Usage: item=100L
 [*]All: Pulls in as many of the specified item as it can until the inventory is full. Usage: item=All
 [/list]
-
 There are a few special cases that are also worth mentioning for specific block types. To override these behaviors, add a Special tag or use one of the Locked keywords in the name: Lock (or something longer, like Locked works too), Seat, Control Station, Hidden, !manual are all things that that will make the sorter ignore a block.
 [list]
 [*]Ice is added to or removed from O2/H2 generators to maintain around 70-80% fullness, but bottles will always be moved from generators to a Bottles container if one exists.
@@ -71,9 +63,7 @@ There are a few special cases that are also worth mentioning for specific block 
 [*]Weapons will be fully filled with whatever ammo they want.
 [*]Sorters will not be emptied if they're in Drain All mode.
 [/list]
-
 [h2]Excluding Grids[/h2]
-
 Add [nosort] to the name of a [i]grid[/i] to exclude it and any connected grids. Add [nosort] to the name of a [i]connector[/i] to exclude any connected grids from sorting. 
 
 Exclusions by both grid name and connector name are transitive.
@@ -91,7 +81,6 @@ A topology like this provides a route to the ship and will cause unexpected item
         (Connector B)          <-> (Docking Connector B)[/noparse][/code]
 
 [h2]Configuration[/h2]
-
 A configuration file is generated the first time the mod is used in %appdata%\Storage\####.sbm_CargoSorter\CargoSort.xml where #### is the steam mod ID.
 
 The default looks like this:
@@ -122,5 +111,4 @@ The default looks like this:
   <ShowProgressNotifications>false</ShowProgressNotifications>
 </CargoSorterConfiguration>
 [/noparse][/code]
-
 All keywords can be changed (e.g. Ammo to Munitions) as well as a few different other options. If the configuration is not valid, it will be reset to the default on next load, and will only take effect via exiting to main menu and reloading/reconnecting.

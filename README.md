@@ -1,6 +1,6 @@
 # Inventory Sorter
 
-Sort command: `/clownsort`
+Sort command: `/sort`
 
 It's a lot like [Isy's Inventory Manager](https://steamcommunity.com/sharedfiles/filedetails/?id=1226261795) and uses a similar config language.
 
