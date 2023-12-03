@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using ParallelTasks;
 using Sandbox.Definitions;
 using Sandbox.Game;
-using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using VRage;
 using VRage.Game;
@@ -12,7 +10,6 @@ using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
-using VRageMath;
 
 namespace CargoSorter
 {
@@ -144,12 +141,12 @@ namespace CargoSorter
 
                 workData.Inventories.SortNoAlloc((InventoryInfo x, InventoryInfo y) =>
                 {
-                    // Special containers always go to the top
-                    if (x.TypeRequests.HasFlag(TypeRequests.Special) && !y.TypeRequests.HasFlag(TypeRequests.Special))
+                    // Blocks and specials go first
+                    if (Util.IsSpecial(x.TypeRequests) && !Util.IsSpecial(y.TypeRequests))
                     {
                         return -1;
                     }
-                    else if (!x.TypeRequests.HasFlag(TypeRequests.Special) && y.TypeRequests.HasFlag(TypeRequests.Special))
+                    else if (!Util.IsSpecial(x.TypeRequests) && Util.IsSpecial(y.TypeRequests))
                     {
                         return 1;
                     }
@@ -297,21 +294,31 @@ namespace CargoSorter
                 inventoryKeys.AddRange(sourceInventory.VirtualInventory.Keys);
                 for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
                 {
+                    if (sourceInventory.VirtualInventory.Count == 0)
+                    {
+                        break;
+                    }
+
                     var destInventory = workData.Inventories[destInvIndex];
                     if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInvIndex == sourceInvIndex)
                     {
                         continue;
                     }
 
-                    if (sourceInventory.TypeRequests.HasFlag(TypeRequests.Special) && (!Config.AllowSpecialSteal || !destInventory.TypeRequests.HasFlag(TypeRequests.Special)))
+                    var sourceSpecial = Util.IsSpecial(sourceInventory.TypeRequests);
+                    var destSpecial = Util.IsSpecial(destInventory.TypeRequests);
+
+                    if (sourceSpecial && (!Config.AllowSpecialSteal || !destSpecial))
                     {
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
                         continue;
                     }
 
-                    if (sourceInventory.Priority <= destInventory.Priority || sourceInventory.VirtualInventory.Count == 0)
+                    // If they're both special or nonspecial then apply priority, otherwise we probably need to take
+                    // from a higher priority normal container to satisfy a lower priority special container.
+                    if (sourceSpecial == destSpecial && (sourceInventory.Priority <= destInventory.Priority))
                     {
-                        break;
+                        continue;
                     }
 
                     var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
@@ -547,7 +554,8 @@ namespace CargoSorter
                     {
                         continue;
                     }
-                    var toTransfer = MyFixedPoint.Min(item.Amount, movement.Amount);
+                    var toTransfer = MyFixedPoint.Min(item.Amount, needToMove);
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {(movement.Source.RealInventory?.Entity as IMyCubeBlock).DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {(movement.Destination.RealInventory?.Entity as IMyCubeBlock).DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
                     transferRequests++;
                     needToMove -= toTransfer;
