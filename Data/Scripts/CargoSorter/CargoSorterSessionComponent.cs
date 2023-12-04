@@ -200,6 +200,63 @@ namespace CargoSorter
                     var inventory = block.GetInventory(i) as MyInventory;
                     var inventoryInfo = new InventoryInfo(inventory);
                     workData.Inventories.Add(inventoryInfo);
+                    foreach (var item in inventoryInfo.VirtualInventory)
+                    {
+                        MyFixedPoint amount;
+                        if (workData.AvailableForDistribution.TryGetValue(item.Key, out amount))
+                        {
+                            amount += item.Value;
+                        }
+                        else
+                        {
+                            amount = item.Value;
+                        }
+                        workData.AvailableForDistribution[item.Key] = amount;
+                    }
+                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special))
+                    {
+                        foreach (var request in inventoryInfo.Requests)
+                        {
+                            MyFixedPoint amount;
+                            if (workData.AvailableForDistribution.TryGetValue(request.Key, out amount))
+                            {
+                                amount -= request.Value;
+                            }
+                            else
+                            {
+                                amount = -request.Value;
+                            }
+                            workData.AvailableForDistribution[request.Key] = amount;
+                        }
+                    }
+                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ReactorFuel))
+                    {
+                        var reactor = block as IMyReactor;
+                        if (reactor == null)
+                        {
+                            continue;
+                        }
+                        var def = MyDefinitionManager.Static.GetDefinition(block.BlockDefinition) as MyReactorDefinition;
+                        if (def == null || def.FuelInfos == null || def.FuelInfos.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        foreach (var fuelInfo in def.FuelInfos)
+                        {
+                            int amount;
+                            var key = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, fuelInfo.FuelId);
+                            if (workData.RequestTypeCount.TryGetValue(key, out amount))
+                            {
+                                amount++;
+                            }
+                            else
+                            {
+                                amount = 1;
+                            }
+                            workData.RequestTypeCount[key] = amount;
+                        }
+                    }
                 }
             }
         }
@@ -251,11 +308,11 @@ namespace CargoSorter
                             inventoryKeys.RemoveAtFast(invKeyIndex);
                             continue;
                         }
-                        var sourceAmountExcess = -CalculateAmountWanted(sourceInventory, virtualItemKey, virtualItemValue);
+                        var sourceAmountExcess = -CalculateAmountWanted(sourceInventory, virtualItemKey, virtualItemValue, workData);
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: Excess: {sourceAmountExcess}");
                         if (sourceAmountExcess > MyFixedPoint.Zero)
                         {
-                            MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue), sourceAmountExcess);
+                            MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), sourceAmountExcess);
                             //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
                             if (amountToBeMoved <= MyFixedPoint.Zero || !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
                             {
@@ -333,7 +390,7 @@ namespace CargoSorter
                             inventoryKeys.RemoveAtFast(invKeyIndex);
                             continue;
                         }
-                        MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue), virtualItemValue);
+                        MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
                         if (amountToBeMoved <= MyFixedPoint.Zero || !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
                         {
                             continue;
@@ -353,7 +410,7 @@ namespace CargoSorter
                 }
             }
         }
-        private MyFixedPoint CalculateAmountWanted(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue)
+        private MyFixedPoint CalculateAmountWanted(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue, CargoSorterWorkData workData)
         {
             if (inventoryInfo.Constraint != null && !inventoryInfo.Constraint.Check(definitionId))
             {
@@ -426,9 +483,39 @@ namespace CargoSorter
                     var reactor = inventoryInfo.RealInventory?.Entity as IMyReactor;
                     if (reactor != null)
                     {
-                        var expectedAmount = (MyFixedPoint)((float)(reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel) * reactor.PowerOutputMultiplier);
+                        MyFixedPoint availableForDistribution;
+                        if (!workData.AvailableForDistribution.TryGetValue(definitionId, out availableForDistribution) || availableForDistribution <= MyFixedPoint.Zero)
+                        {
+                            return MyFixedPoint.Zero;
+                        }
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} availableForDistribution {availableForDistribution}");
+                        var typeKey = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, definitionId);
+                        int typeRequestCount;
+                        if (!workData.RequestTypeCount.TryGetValue(typeKey, out typeRequestCount) || availableForDistribution <= 0)
+                        {
+                            return MyFixedPoint.Zero;
+                        }
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} typeRequestCount {typeRequestCount}");
+
+                        var expectedAmount = (MyFixedPoint)Math.Min(
+                             (float)availableForDistribution / (float)typeRequestCount,
+                             ((float)(reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel) * reactor.PowerOutputMultiplier)
+                            );
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
                         inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
-                        return virtualAmount < expectedAmount * 0.5f ? expectedAmount - virtualAmount : virtualAmount;
+
+                        if (virtualAmount < expectedAmount * 0.5f)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning {expectedAmount - virtualAmount}");
+                            return expectedAmount - virtualAmount;                            
+                        }
+                        else if (virtualAmount > expectedAmount)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning {expectedAmount - virtualAmount}");
+                            return expectedAmount - virtualAmount;
+                        }
+
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
                     }
                     return MyFixedPoint.Zero;
                 case TypeRequests.WeaponAmmo:
