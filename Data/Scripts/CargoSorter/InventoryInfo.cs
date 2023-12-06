@@ -7,6 +7,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Network;
 using VRage.ObjectBuilders;
 
 namespace CargoSorter
@@ -255,7 +256,7 @@ namespace CargoSorter
                 var inv = (MyInventory)block.GetInventory(i);
                 foreach (var item in inv.GetItems())
                 {
-                    var id = (SerializableDefinitionId)item.Content.GetId();
+                    SerializableDefinitionId id = (SerializableDefinitionId)item.Content.GetId();
                     MyFixedPoint amount;
                     items.TryGetValue(id, out amount);
                     amount += item.Amount;
@@ -265,7 +266,17 @@ namespace CargoSorter
 
             foreach (var item in items)
             {
-                ini.Set("Inventory", item.Key.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, ""), item.Value.ToIntSafe());
+                string customDataKey;
+                string friendlyType = null;
+                if (CargoSorterSessionComponent.Instance.TryGetFriendlyName(item.Key, out friendlyType))
+                {
+                    customDataKey = $"{friendlyType}/{item.Key.SubtypeName}";
+                }
+                else
+                {
+                    customDataKey = item.Key.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, "");
+                }
+                ini.Set("Inventory", customDataKey, item.Value.ToIntSafe());
             }
             return ini.ToString();
         }

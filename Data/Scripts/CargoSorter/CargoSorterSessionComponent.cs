@@ -28,6 +28,8 @@ namespace CargoSorter
 
         private readonly Dictionary<string, MyDefinitionId> stringPhysicalItemMap = new Dictionary<string, MyDefinitionId>(StringComparer.InvariantCultureIgnoreCase);
 
+        private readonly Dictionary<MyObjectBuilderType, string> friendlyTypeNames = new Dictionary<MyObjectBuilderType, string>();
+
         public override void LoadData()
         {
             if (Util.IsDedicatedServer)
@@ -47,30 +49,35 @@ namespace CargoSorter
                 {
                     continue;
                 }
-                MakeNormalizedId(definition);
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
+                    MakeNormalizedId(definition, "Ore");
                 }
                 if (definition.IsIngot)
                 {
                     allIngots.Add(definition.Id);
+                    MakeNormalizedId(definition, "Ingot");
                 }
-                if (definition is MyToolItemDefinition || definition is MyWeaponItemDefinition || definition is MyUsableItemDefinition || definition is MyDatapadDefinition)
+                if (definition is MyUsableItemDefinition || definition is MyDatapadDefinition || definition is MyPackageDefinition || definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
                 {
                     allTools.Add(definition.Id);
+                    MakeNormalizedId(definition, "Item");
                 }
                 if (definition is MyOxygenContainerDefinition)
                 {
                     allBottles.Add(definition.Id);
+                    MakeNormalizedId(definition, "Bottle");
                 }
                 if (definition is MyComponentDefinition)
                 {
                     allComponents.Add(definition.Id);
+                    MakeNormalizedId(definition, "Component");
                 }
                 if (definition is MyAmmoMagazineDefinition)
                 {
                     allAmmo.Add(definition.Id);
+                    MakeNormalizedId(definition, "Ammo");
                 }
             }
             foreach (var definition in MyDefinitionManager.Static.GetHandItemDefinitions())
@@ -79,24 +86,65 @@ namespace CargoSorter
                 {
                     continue;
                 }
-                MakeNormalizedId(definition);
+                MakeNormalizedId(definition, "Tool");
                 allTools.Add(definition.PhysicalItemId);
             }
+
+            //foreach (var item in friendlyTypeNames)
+            //{
+            //    MyLog.Default.WriteLineAndConsole($"CargoSort: Friendly type {item.Key} -> {item.Value}");
+            //}
+            //foreach (var item in stringPhysicalItemMap)
+            //{
+            //    MyLog.Default.WriteLineAndConsole($"CargoSort: Normalized ID {item.Key} -> {item.Value}");
+            //}
         }
 
-        private void MakeNormalizedId(MyDefinitionBase definition)
+        private void MakeNormalizedId(MyDefinitionBase definition, string friendlyType)
         {
+            var friendlyTypeLower = friendlyType.ToLowerInvariant();
             var normalizedStringId = definition.Id.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, string.Empty, StringComparison.InvariantCultureIgnoreCase).ToLowerInvariant();
             stringPhysicalItemMap[normalizedStringId] = definition.Id;
+            if (normalizedStringId != friendlyTypeLower)
+            {
+                var normalizedFriendlyId = $"{friendlyType}/{definition.Id.SubtypeName}".ToLowerInvariant();
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Adding friendly type {normalizedFriendlyId} -> {definition.Id}");
+                stringPhysicalItemMap[normalizedFriendlyId] = definition.Id;
+                if (!friendlyTypeNames.ContainsKey(definition.Id.TypeId))
+                {
+                    friendlyTypeNames.Add(definition.Id.TypeId, friendlyType);
+                }
+                //else
+                //{
+                //    if (friendlyTypeNames[definition.Id.TypeId] != friendlyType)
+                //    {
+                //        MyLog.Default.WriteLineAndConsole($"CargoSort: Mismatch: {definition.Id.TypeId} is {friendlyTypeNames[definition.Id.TypeId]}, wants to be {friendlyType}");
+                //    }
+                //}
+            }
         }
 
         public bool TryGetNormalizedItemDefinition(string shortStringName, out MyDefinitionId definitionId)
         {
             if (stringPhysicalItemMap.TryGetValue(shortStringName, out definitionId))
             {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Normalized type lookup {shortStringName} -> {definitionId}");
                 return true;
             }
 
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Normalized type lookup {shortStringName} failed");
+            return false;
+        }
+
+        public bool TryGetFriendlyName(MyDefinitionId definitionId, out string friendlyName)
+        {
+            if (friendlyTypeNames.TryGetValue(definitionId.TypeId, out friendlyName))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Friendly type lookup {definitionId.TypeId} -> {friendlyName}");
+                return true;
+            }
+
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Friendly type lookup {definitionId.TypeId} failed");
             return false;
         }
 
@@ -428,6 +476,13 @@ namespace CargoSorter
                         return -currentValue;
                     }
                     inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+
+                    // <= 0 disables the feature
+                    if (Config.GasGeneratorFillPercent <= 0)
+                    {
+                        return MyFixedPoint.Zero;
+                    }
+
                     return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
                         ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
                         (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
@@ -444,7 +499,7 @@ namespace CargoSorter
 
                     // Make sure the output inventory is clear in normal operation.
                     var assembler = inventoryInfo.RealInventory?.Entity as IMyAssembler;
-                    if (assembler != null)
+                    if (assembler != null && assembler.IsProducing && assembler.Enabled)
                     {
                         MyInventoryConstraint constraintToCheck = null;
                         switch (assembler.Mode)
@@ -473,7 +528,7 @@ namespace CargoSorter
                             return MyFixedPoint.Zero;
                         }
                     }
-                    return percentFull < Config.EmptyRefineryPercent ? MyFixedPoint.Zero : -currentValue;
+                    return percentFull < Config.EmptyRefineryPercent && refinery.IsProducing && refinery.Enabled ? MyFixedPoint.Zero : -currentValue;
                 case TypeRequests.GasTankBottles:
                     return -currentValue;
                 case TypeRequests.SorterItems:
@@ -497,25 +552,30 @@ namespace CargoSorter
                         }
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} typeRequestCount {typeRequestCount}");
 
-                        var expectedAmount = (MyFixedPoint)Math.Min(
-                             (float)availableForDistribution / (float)typeRequestCount,
-                             ((float)(reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel) * reactor.PowerOutputMultiplier)
-                            );
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
-                        inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+                        var configuredExpected = reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel;
 
-                        if (virtualAmount < expectedAmount * 0.5f)
+                        // <= 0 disables the feature
+                        if (configuredExpected <= 0)
                         {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning {expectedAmount - virtualAmount}");
-                            return expectedAmount - virtualAmount;                            
-                        }
-                        else if (virtualAmount > expectedAmount)
-                        {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning {expectedAmount - virtualAmount}");
-                            return expectedAmount - virtualAmount;
-                        }
+                            var expectedAmount = (MyFixedPoint)Math.Min(
+                                 (float)availableForDistribution / (float)typeRequestCount,
+                                 ((float)configuredExpected * reactor.PowerOutputMultiplier)
+                                );
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
+                            inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
 
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
+                            if (virtualAmount < expectedAmount * 0.5f)
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning {expectedAmount - virtualAmount}");
+                                return expectedAmount - virtualAmount;
+                            }
+                            else if (virtualAmount > expectedAmount)
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning {expectedAmount - virtualAmount}");
+                                return expectedAmount - virtualAmount;
+                            }
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
+                        }
                     }
                     return MyFixedPoint.Zero;
                 case TypeRequests.WeaponAmmo:

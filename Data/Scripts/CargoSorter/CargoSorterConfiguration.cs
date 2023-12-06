@@ -1,15 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using ProtoBuf;
-using Sandbox.Definitions;
-using Sandbox.Game;
 using Sandbox.ModAPI;
-using VRage;
-using VRage.Game;
-using VRage.ObjectBuilders;
 using VRage.Utils;
-using VRageMath;
 
 namespace CargoSorter
 {
@@ -108,9 +101,9 @@ namespace CargoSorter
                 LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
                 EmptyRefineryPercent > 0f && EmptyRefineryPercent <= 1f &&
                 EmptyAssemblerPercent > 0f && EmptyAssemblerPercent <= 1f &&
-                GasGeneratorFillPercent > 0f && GasGeneratorFillPercent <= 1f &&
-                ExpectedLargeGridReactorFuel > 0 &&
-                ExpectedSmallGridReactorFuel > 0;
+                GasGeneratorFillPercent >= 0f && GasGeneratorFillPercent <= 1f &&
+                ExpectedLargeGridReactorFuel >= 0 &&
+                ExpectedSmallGridReactorFuel >= 0;
         }
 
         private void SetDefaults()
@@ -124,8 +117,8 @@ namespace CargoSorter
             ToolContainerKeyword = defaultToolContainerKeyword;
             BottleContainerKeyword = defaultBottleContainerKeyword;
             LockedContainerKeywords = new List<string>(defaultLockedContainerKeywords);
-            EmptyRefineryPercent = 0.5f;
-            EmptyAssemblerPercent = 0.5f;
+            EmptyRefineryPercent = 0.1f;
+            EmptyAssemblerPercent = 0.1f;
             GasGeneratorFillPercent = 0.8f;
             ExpectedLargeGridReactorFuel = 100;
             ExpectedSmallGridReactorFuel = 25;
