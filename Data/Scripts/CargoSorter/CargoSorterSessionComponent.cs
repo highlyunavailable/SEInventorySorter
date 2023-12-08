@@ -52,32 +52,32 @@ namespace CargoSorter
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
-                    MakeNormalizedId(definition, "Ore");
+                    MakeNormalizedId(definition.Id, "Ore");
                 }
                 if (definition.IsIngot)
                 {
                     allIngots.Add(definition.Id);
-                    MakeNormalizedId(definition, "Ingot");
+                    MakeNormalizedId(definition.Id, "Ingot");
                 }
                 if (definition is MyUsableItemDefinition || definition is MyDatapadDefinition || definition is MyPackageDefinition || definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
                 {
                     allTools.Add(definition.Id);
-                    MakeNormalizedId(definition, "Item");
+                    MakeNormalizedId(definition.Id, "Item");
                 }
                 if (definition is MyOxygenContainerDefinition)
                 {
                     allBottles.Add(definition.Id);
-                    MakeNormalizedId(definition, "Bottle");
+                    MakeNormalizedId(definition.Id, "Bottle");
                 }
                 if (definition is MyComponentDefinition)
                 {
                     allComponents.Add(definition.Id);
-                    MakeNormalizedId(definition, "Component");
+                    MakeNormalizedId(definition.Id, "Component");
                 }
                 if (definition is MyAmmoMagazineDefinition)
                 {
                     allAmmo.Add(definition.Id);
-                    MakeNormalizedId(definition, "Ammo");
+                    MakeNormalizedId(definition.Id, "Ammo");
                 }
             }
             foreach (var definition in MyDefinitionManager.Static.GetHandItemDefinitions())
@@ -86,7 +86,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
-                MakeNormalizedId(definition, "Tool");
+                MakeNormalizedId(definition.PhysicalItemId, "Tool");
                 allTools.Add(definition.PhysicalItemId);
             }
 
@@ -100,19 +100,19 @@ namespace CargoSorter
             //}
         }
 
-        private void MakeNormalizedId(MyDefinitionBase definition, string friendlyType)
+        private void MakeNormalizedId(MyDefinitionId definitionId, string friendlyType)
         {
             var friendlyTypeLower = friendlyType.ToLowerInvariant();
-            var normalizedStringId = definition.Id.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, string.Empty, StringComparison.InvariantCultureIgnoreCase).ToLowerInvariant();
-            stringPhysicalItemMap[normalizedStringId] = definition.Id;
+            var normalizedStringId = definitionId.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, string.Empty, StringComparison.InvariantCultureIgnoreCase).ToLowerInvariant();
+            stringPhysicalItemMap[normalizedStringId] = definitionId;
             if (normalizedStringId != friendlyTypeLower)
             {
-                var normalizedFriendlyId = $"{friendlyType}/{definition.Id.SubtypeName}".ToLowerInvariant();
+                var normalizedFriendlyId = $"{friendlyType}/{definitionId.SubtypeName}".ToLowerInvariant();
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Adding friendly type {normalizedFriendlyId} -> {definition.Id}");
-                stringPhysicalItemMap[normalizedFriendlyId] = definition.Id;
-                if (!friendlyTypeNames.ContainsKey(definition.Id.TypeId))
+                stringPhysicalItemMap[normalizedFriendlyId] = definitionId;
+                if (!friendlyTypeNames.ContainsKey(definitionId.TypeId))
                 {
-                    friendlyTypeNames.Add(definition.Id.TypeId, friendlyType);
+                    friendlyTypeNames.Add(definitionId.TypeId, friendlyType);
                 }
                 //else
                 //{
@@ -356,10 +356,12 @@ namespace CargoSorter
                             inventoryKeys.RemoveAtFast(invKeyIndex);
                             continue;
                         }
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Excess");
                         var sourceAmountExcess = -CalculateAmountWanted(sourceInventory, virtualItemKey, virtualItemValue, workData);
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: Excess: {sourceAmountExcess}");
                         if (sourceAmountExcess > MyFixedPoint.Zero)
                         {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Excess AmountToBeMoved");
                             MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), sourceAmountExcess);
                             //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
                             if (amountToBeMoved <= MyFixedPoint.Zero || !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
@@ -438,6 +440,7 @@ namespace CargoSorter
                             inventoryKeys.RemoveAtFast(invKeyIndex);
                             continue;
                         }
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
                         MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
                         if (amountToBeMoved <= MyFixedPoint.Zero || !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
                         {
@@ -489,94 +492,127 @@ namespace CargoSorter
                         (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
                         : MyFixedPoint.Zero;
                 case TypeRequests.AssemblerIngots:
-                    // If either inventory is too full, it doesn't matter which inventory it is - empty it.
-                    // This can cause repulls but is better than halting all production because a refinery
-                    // is pushing ingots it doesn't want into the assembler.
-                    if (percentFull > 0.9)
-                    {
-                        return -currentValue;
-                    }
-
-                    // Make sure the output inventory is clear in normal operation.
                     var assembler = inventoryInfo.RealInventory?.Entity as IMyAssembler;
+                    // Make sure the output inventory is clear in normal operation.
                     if (assembler != null && assembler.IsProducing && assembler.Enabled)
                     {
                         MyInventoryConstraint constraintToCheck = null;
                         switch (assembler.Mode)
                         {
                             case Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly:
+                                if (inventoryInfo.RealInventory != assembler.InputInventory)
+                                {
+                                    // Always clear output side when assembling
+                                    return -currentValue;
+                                }
                                 constraintToCheck = ((MyInventory)assembler.InputInventory)?.Constraint;
                                 break;
                             case Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly:
+                                if (inventoryInfo.RealInventory != assembler.OutputInventory)
+                                {
+                                    // Always clear input side when disassembling
+                                    return -currentValue;
+                                }
                                 constraintToCheck = ((MyInventory)assembler.OutputInventory)?.Constraint;
                                 break;
                         }
 
-                        if (constraintToCheck != null && constraintToCheck.ConstrainedIds.Contains(definitionId) && percentFull < Config.EmptyAssemblerPercent)
+                        if (constraintToCheck != null && constraintToCheck.ConstrainedIds.Contains(definitionId))
                         {
-                            return MyFixedPoint.Zero;
+                            var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
+                            MyFixedPoint newAmount = -currentValue;
+                            // Crawl the queue's blueprints to see if what we have is what we need, and get rid of stuff we don't need.
+                            foreach (var queuedItem in assembler.GetQueue())
+                            {
+                                var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
+                                if (blueprint == null)
+                                {
+                                    continue;
+                                }
+
+                                foreach (var prerequisite in blueprint.Prerequisites)
+                                {
+                                    if (prerequisite.Id != definitionId)
+                                    {
+                                        continue;
+                                    }
+                                    newAmount += prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
+                                }
+                            }
+
+                            // Let the assembler pull if it can and needs more so that there's no situation
+                            // where one assembler hogs all the material due to queued items.
+                            return assembler.UseConveyorSystem && newAmount > MyFixedPoint.Zero ? MyFixedPoint.Zero : newAmount;
                         }
                     }
+                    // If the assembler is off or full somehow, just take everything out.
                     return -currentValue;
                 case TypeRequests.RefineryOre:
                     var refinery = inventoryInfo.RealInventory?.Entity as IMyRefinery;
                     if (refinery != null)
                     {
                         var inputConstraint = ((MyInventory)refinery.InputInventory)?.Constraint;
-                        if (inputConstraint != null && inputConstraint.ConstrainedIds.Contains(definitionId))
+                        if (inventoryInfo.RealInventory == refinery.InputInventory && inputConstraint != null && inputConstraint.ConstrainedIds.Contains(definitionId))
                         {
-                            return MyFixedPoint.Zero;
+                            // Only clear the refinery input if the refinery is off
+                            return refinery.IsProducing && refinery.Enabled ? MyFixedPoint.Zero : -currentValue;
                         }
                     }
-                    return percentFull < Config.EmptyRefineryPercent && refinery.IsProducing && refinery.Enabled ? MyFixedPoint.Zero : -currentValue;
+                    // If this is the refinery output, or the refinery is off or full somehow, take everything out.
+                    return -currentValue;
                 case TypeRequests.GasTankBottles:
+                    // Remove all bottles from tanks
                     return -currentValue;
                 case TypeRequests.SorterItems:
                     var sorter = inventoryInfo.RealInventory?.Entity as IMyConveyorSorter;
                     return sorter != null && sorter.DrainAll ? MyFixedPoint.Zero : -currentValue;
                 case TypeRequests.ReactorFuel:
                     var reactor = inventoryInfo.RealInventory?.Entity as IMyReactor;
-                    if (reactor != null)
+                    if (reactor == null)
                     {
-                        MyFixedPoint availableForDistribution;
-                        if (!workData.AvailableForDistribution.TryGetValue(definitionId, out availableForDistribution) || availableForDistribution <= MyFixedPoint.Zero)
-                        {
-                            return MyFixedPoint.Zero;
-                        }
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} availableForDistribution {availableForDistribution}");
-                        var typeKey = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, definitionId);
-                        int typeRequestCount;
-                        if (!workData.RequestTypeCount.TryGetValue(typeKey, out typeRequestCount) || availableForDistribution <= 0)
-                        {
-                            return MyFixedPoint.Zero;
-                        }
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} typeRequestCount {typeRequestCount}");
-
-                        var configuredExpected = reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel;
-
-                        // <= 0 disables the feature
-                        if (configuredExpected <= 0)
-                        {
-                            var expectedAmount = (MyFixedPoint)Math.Min(
-                                 (float)availableForDistribution / (float)typeRequestCount,
-                                 ((float)configuredExpected * reactor.PowerOutputMultiplier)
-                                );
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
-                            inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
-
-                            if (virtualAmount < expectedAmount * 0.5f)
-                            {
-                                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning {expectedAmount - virtualAmount}");
-                                return expectedAmount - virtualAmount;
-                            }
-                            else if (virtualAmount > expectedAmount)
-                            {
-                                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning {expectedAmount - virtualAmount}");
-                                return expectedAmount - virtualAmount;
-                            }
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
-                        }
+                        return -currentValue;
                     }
+
+                    MyFixedPoint availableForDistribution;
+                    if (!workData.AvailableForDistribution.TryGetValue(definitionId, out availableForDistribution) || availableForDistribution <= MyFixedPoint.Zero)
+                    {
+                        return MyFixedPoint.Zero;
+                    }
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} availableForDistribution {availableForDistribution}");
+                    var typeKey = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, definitionId);
+                    int typeRequestCount;
+                    if (!workData.RequestTypeCount.TryGetValue(typeKey, out typeRequestCount) || availableForDistribution <= 0)
+                    {
+                        return MyFixedPoint.Zero;
+                    }
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} typeRequestCount {typeRequestCount}");
+
+                    var configuredExpected = reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel;
+
+                    // <= 0 disables the feature
+                    if (configuredExpected <= 0)
+                    {
+                        return MyFixedPoint.Zero;
+                    }
+
+                    var expectedAmount = (MyFixedPoint)Math.Min(
+                         (float)availableForDistribution / (float)typeRequestCount,
+                         ((float)configuredExpected * reactor.PowerOutputMultiplier)
+                        );
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
+                    inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+
+                    if (virtualAmount < expectedAmount * 0.5f)
+                    {
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning ({expectedAmount} - {virtualAmount}) {expectedAmount - virtualAmount}");
+                        return expectedAmount - virtualAmount;
+                    }
+                    else if (currentValue > expectedAmount)
+                    {
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning ({expectedAmount} - {currentValue}) {expectedAmount - currentValue}");
+                        return expectedAmount - currentValue;
+                    }
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
                     return MyFixedPoint.Zero;
                 case TypeRequests.WeaponAmmo:
                     return inventoryInfo.ComputeAmountThatFits(definitionId);
@@ -584,18 +620,17 @@ namespace CargoSorter
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
                     return GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue);
                 default:
+                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests.ContainsKey(definitionId))
+                    {
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
+                        return GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue);
+                    }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Tools) && allTools.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
-                    {
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
-                        return GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue);
-                    }
                     return -currentValue;
             }
         }

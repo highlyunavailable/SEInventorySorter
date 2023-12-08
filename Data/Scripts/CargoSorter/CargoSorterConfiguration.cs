@@ -30,8 +30,6 @@ namespace CargoSorter
         public string AmmoContainerKeyword { get; set; }
         public string BottleContainerKeyword { get; set; }
         public List<string> LockedContainerKeywords { get; set; }
-        public float EmptyRefineryPercent { get; set; }
-        public float EmptyAssemblerPercent { get; set; }
         public float GasGeneratorFillPercent { get; set; }
         public int ExpectedLargeGridReactorFuel { get; set; }
         public int ExpectedSmallGridReactorFuel { get; set; }
@@ -99,8 +97,6 @@ namespace CargoSorter
                 !string.IsNullOrWhiteSpace(ToolContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(BottleContainerKeyword) &&
                 LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
-                EmptyRefineryPercent > 0f && EmptyRefineryPercent <= 1f &&
-                EmptyAssemblerPercent > 0f && EmptyAssemblerPercent <= 1f &&
                 GasGeneratorFillPercent >= 0f && GasGeneratorFillPercent <= 1f &&
                 ExpectedLargeGridReactorFuel >= 0 &&
                 ExpectedSmallGridReactorFuel >= 0;
@@ -117,8 +113,6 @@ namespace CargoSorter
             ToolContainerKeyword = defaultToolContainerKeyword;
             BottleContainerKeyword = defaultBottleContainerKeyword;
             LockedContainerKeywords = new List<string>(defaultLockedContainerKeywords);
-            EmptyRefineryPercent = 0.1f;
-            EmptyAssemblerPercent = 0.1f;
             GasGeneratorFillPercent = 0.8f;
             ExpectedLargeGridReactorFuel = 100;
             ExpectedSmallGridReactorFuel = 25;
