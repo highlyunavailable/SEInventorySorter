@@ -261,10 +261,15 @@ namespace CargoSorter
                         }
                         workData.AvailableForDistribution[item.Key] = amount;
                     }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special))
+                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special) || inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
                     {
                         foreach (var request in inventoryInfo.Requests)
                         {
+                            // Don't reserve for All containers
+                            if (request.Value == MyFixedPoint.MaxValue)
+                            {
+                                continue;
+                            }
                             MyFixedPoint amount;
                             if (workData.AvailableForDistribution.TryGetValue(request.Key, out amount))
                             {
@@ -713,6 +718,23 @@ namespace CargoSorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequests} transfers requested.");
+                }
+            }
+
+            if (Config.ShowMissingItems)
+            {
+                foreach (var availability in workData.AvailableForDistribution)
+                {
+                    if (availability.Value >= MyFixedPoint.Zero)
+                    {
+                        continue;
+                    }
+
+                    string friendlyName;
+                    if (TryGetFriendlyName(availability.Key, out friendlyName))
+                    {
+                        MyAPIGateway.Utilities.ShowMessage("Missing", $"{Math.Ceiling(-((float)availability.Value))} {friendlyName}/{availability.Key.SubtypeName}");
+                    }
                 }
             }
         }

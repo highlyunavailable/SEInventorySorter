@@ -35,6 +35,7 @@ namespace CargoSorter
         public int ExpectedSmallGridReactorFuel { get; set; }
         public bool AllowSpecialSteal { get; set; }
         public bool ShowProgressNotifications { get; set; }
+        public bool ShowMissingItems { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
@@ -117,7 +118,8 @@ namespace CargoSorter
             ExpectedLargeGridReactorFuel = 100;
             ExpectedSmallGridReactorFuel = 25;
             AllowSpecialSteal = true;
-            ShowProgressNotifications = false;
+            ShowProgressNotifications = true;
+            ShowMissingItems = true;
         }
     }
 }
