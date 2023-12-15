@@ -402,3 +402,4 @@ FodyWeavers.xsd
 *.sln
 *.csproj
 metadata.mod
+modinfo.sbmi-*

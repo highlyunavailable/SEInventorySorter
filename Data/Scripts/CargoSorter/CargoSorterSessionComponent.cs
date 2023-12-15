@@ -1,9 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using CargoSorter.Data.Scripts.CargoSorter;
 using ParallelTasks;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
+using Sandbox.ModAPI.Interfaces.Terminal;
 using VRage;
 using VRage.Game;
 using VRage.Game.Components;
@@ -29,6 +33,8 @@ namespace CargoSorter
         private readonly Dictionary<string, MyDefinitionId> stringPhysicalItemMap = new Dictionary<string, MyDefinitionId>(StringComparer.InvariantCultureIgnoreCase);
 
         private readonly Dictionary<MyObjectBuilderType, string> friendlyTypeNames = new Dictionary<MyObjectBuilderType, string>();
+
+        private Task sortJob;
 
         public override void LoadData()
         {
@@ -100,6 +106,12 @@ namespace CargoSorter
             //}
         }
 
+        public override void BeforeStart()
+        {
+            MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
+            MyAPIGateway.TerminalControls.CustomActionGetter += CustomActionGetter;
+        }
+
         private void MakeNormalizedId(MyDefinitionId definitionId, string friendlyType)
         {
             var friendlyTypeLower = friendlyType.ToLowerInvariant();
@@ -162,9 +174,19 @@ namespace CargoSorter
                 return;
             }
 
-            long localPlayerId = MyAPIGateway.Session.LocalHumanPlayer.IdentityId;
+            BeginSortJob(shipController);
+        }
+
+        public void BeginSortJob(IMyShipController shipController)
+        {
+            if (sortJob.valid && !sortJob.IsComplete)
+            {
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "Sorting is already in progress!");
+                return;
+            }
+
             var workData = new CargoSorterWorkData(shipController.CubeGrid);
-            MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
+            sortJob = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
         }
 
         private void SortInventoryAction(WorkData data)
@@ -308,6 +330,30 @@ namespace CargoSorter
                                 amount = 1;
                             }
                             workData.RequestTypeCount[key] = amount;
+                        }
+                    }
+                    else if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.WeaponAmmo))
+                    {
+                        if (inventoryInfo.Constraint != null && inventory.Constraint.ConstrainedIds.Count == 1)
+                        {
+                            var wantedAmmo = inventory.Constraint.ConstrainedIds.First();
+                            var wantedAmount = inventoryInfo.ComputeAmountThatFits(wantedAmmo, true);
+
+                            if (wantedAmount <= MyFixedPoint.Zero || wantedAmount >= MyFixedPoint.MaxValue)
+                            {
+                                continue;
+                            }
+
+                            MyFixedPoint amount;
+                            if (workData.AvailableForDistribution.TryGetValue(wantedAmmo, out amount))
+                            {
+                                amount -= wantedAmount;
+                            }
+                            else
+                            {
+                                amount = -wantedAmount;
+                            }
+                            workData.AvailableForDistribution[wantedAmmo] = amount;
                         }
                     }
                 }
@@ -696,6 +742,7 @@ namespace CargoSorter
 
         private void SortInventoryCallback(WorkData data)
         {
+            sortJob = new Task();
             var workData = (CargoSorterWorkData)data;
 
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Virtual Inventories after moves:");
@@ -723,7 +770,7 @@ namespace CargoSorter
 
             if (Config.ShowMissingItems)
             {
-                foreach (var availability in workData.AvailableForDistribution)
+                foreach (var availability in workData.AvailableForDistribution.OrderByDescending(kv => (float)kv.Value))
                 {
                     if (availability.Value >= MyFixedPoint.Zero)
                     {
@@ -733,7 +780,7 @@ namespace CargoSorter
                     string friendlyName;
                     if (TryGetFriendlyName(availability.Key, out friendlyName))
                     {
-                        MyAPIGateway.Utilities.ShowMessage("Missing", $"{Math.Ceiling(-((float)availability.Value))} {friendlyName}/{availability.Key.SubtypeName}");
+                        MyAPIGateway.Utilities.ShowMessage("Needed", $"{Math.Ceiling(-((float)availability.Value))} {friendlyName}/{availability.Key.SubtypeName}");
                     }
                 }
             }
@@ -772,12 +819,30 @@ namespace CargoSorter
             return transferRequests;
         }
 
+        private void CustomActionGetter(IMyTerminalBlock block, List<IMyTerminalAction> actions)
+        {
+            if (block is IMyShipController)
+            {
+                actions.Add(TerminalControls.SortAction);
+            }
+        }
+
+        private void CustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
+        {
+            if (block is IMyShipController)
+            {
+                controls.AddOrInsert(TerminalControls.SortButton, 5);
+            }
+        }
+
         protected override void UnloadData()
         {
             if (Util.IsDedicatedServer)
             {
                 return;
             }
+            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             Instance = null;
         }
