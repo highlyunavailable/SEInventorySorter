@@ -312,25 +312,24 @@ namespace CargoSorter
                             continue;
                         }
                         var def = MyDefinitionManager.Static.GetDefinition(block.BlockDefinition) as MyReactorDefinition;
-                        if (def == null || def.FuelInfos == null || def.FuelInfos.Length == 0)
+                        if (def == null || def.FuelInfos == null || def.FuelInfos.Length != 1)
                         {
                             continue;
                         }
 
-                        foreach (var fuelInfo in def.FuelInfos)
+                        var fuelInfo = def.FuelInfos.First();
+                        int amount;
+                        var key = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, fuelInfo.FuelId);
+                        if (workData.RequestTypeCount.TryGetValue(key, out amount))
                         {
-                            int amount;
-                            var key = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, fuelInfo.FuelId);
-                            if (workData.RequestTypeCount.TryGetValue(key, out amount))
-                            {
-                                amount++;
-                            }
-                            else
-                            {
-                                amount = 1;
-                            }
-                            workData.RequestTypeCount[key] = amount;
+                            amount++;
                         }
+                        else
+                        {
+                            amount = 1;
+                        }
+                        workData.RequestTypeCount[key] = amount;
+
                     }
                     else if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.WeaponAmmo))
                     {
