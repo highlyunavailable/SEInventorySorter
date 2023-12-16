@@ -63,7 +63,7 @@ namespace CargoSorter
                     MyLog.Default.WriteLineAndConsole($"CargoSort: Failed to load mod settings: {e.Message}\n{e.StackTrace}");
                 }
 
-                using (var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(ConfigFileName, typeof(CargoSorterConfiguration)))
+                using (var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(ConfigFileName, typeof(CargoSorterConfiguration)))
                 {
                     var data = reader.ReadToEnd();
                     if (data.Length > 0)
