@@ -34,6 +34,8 @@ namespace CargoSorter
 
         private readonly Dictionary<MyObjectBuilderType, string> friendlyTypeNames = new Dictionary<MyObjectBuilderType, string>();
 
+        private static readonly MyDefinitionId IgnoredEnergyAmmoDefinitionId = new MyDefinitionId(typeof(MyObjectBuilder_AmmoMagazine), "Energy");
+
         private Task sortJob;
 
         public override void LoadData()
@@ -336,6 +338,11 @@ namespace CargoSorter
                         if (inventoryInfo.Constraint != null && inventory.Constraint.ConstrainedIds.Count == 1)
                         {
                             var wantedAmmo = inventory.Constraint.ConstrainedIds.First();
+                            if (wantedAmmo == IgnoredEnergyAmmoDefinitionId) // Ignore weaponcore energy "ammo"
+                            {
+                                continue;
+                            }
+
                             var wantedAmount = inventoryInfo.ComputeAmountThatFits(wantedAmmo, true);
 
                             if (wantedAmount <= MyFixedPoint.Zero || wantedAmount >= MyFixedPoint.MaxValue)
