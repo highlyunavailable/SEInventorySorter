@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
+using SpaceEngineers.Game.ModAPI;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Network;
 using VRage.ObjectBuilders;
 
 namespace CargoSorter
@@ -20,6 +20,7 @@ namespace CargoSorter
         public byte Priority;
         public TypeRequests TypeRequests;
         public Dictionary<MyDefinitionId, MyFixedPoint> Requests;
+        public RequestValidationStatus RequestStatus;
         public Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
         public MyFixedPoint VirtualVolume;
         public MyFixedPoint VirtualMass;
@@ -62,7 +63,7 @@ namespace CargoSorter
             {
                 TypeRequests = TypeRequests.Special;
                 Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
-                ParseCustomDataRequests(Block, Requests);
+                ParseCustomDataRequests(this, Requests);
             }
             else
             {
@@ -94,7 +95,15 @@ namespace CargoSorter
                 {
                     TypeRequests |= TypeRequests.Limited;
                     Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
-                    ParseCustomDataRequests(Block, Requests);
+                    ParseCustomDataRequests(this, Requests);
+                }
+            }
+
+            if (Requests != null && Requests.Count > 0)
+            {
+                if (!CanRequestsFit(Requests, realInventory.MaxVolume))
+                {
+                    RequestStatus |= RequestValidationStatus.TooMuchVolume;
                 }
             }
 
@@ -149,24 +158,42 @@ namespace CargoSorter
                     TypeRequests = TypeRequests.ReactorFuel;
                     Priority = 0;
                 }
-                else if (Block is IMyUserControllableGun)
+                else if (Block is IMyUserControllableGun || Block is IMyParachute)
                 {
-                    TypeRequests = TypeRequests.WeaponAmmo;
+                    TypeRequests = TypeRequests.ConsumableAmmo;
                     Priority = 0;
                 }
                 else if (Block is IMyConveyorSorter)
                 {
                     // If it doesn't contain Sorter in the name, it's probably a weaponcore weapon.
-                    TypeRequests = Block.BlockDefinition.SubtypeId.Contains("Sorter") ? TypeRequests.SorterItems : TypeRequests.WeaponAmmo;
+                    TypeRequests = Block.BlockDefinition.SubtypeId.Contains("Sorter") ? TypeRequests.SorterItems : TypeRequests.ConsumableAmmo;
                     Priority = 0;
                 }
             }
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
         }
 
-        private void ParseCustomDataRequests(IMyCubeBlock block, Dictionary<MyDefinitionId, MyFixedPoint> specialRequests)
+        private bool CanRequestsFit(Dictionary<MyDefinitionId, MyFixedPoint> requests, MyFixedPoint maxVolume)
         {
-            var terminalBlock = block as IMyTerminalBlock;
+            MyFixedPoint sumVolume = MyFixedPoint.Zero;
+            foreach (var request in requests)
+            {
+                if (request.Value == MyFixedPoint.MaxValue) // It's an All request, skip it.
+                {
+                    continue;
+                }
+
+                float itemVolume;
+                if (CargoSorterSessionComponent.Instance.TryGetVolume(request.Key, out itemVolume)) {
+                    sumVolume += request.Value * itemVolume;
+                }
+            }
+            return sumVolume <= maxVolume;
+        }
+
+        private void ParseCustomDataRequests(InventoryInfo inventoryInfo, Dictionary<MyDefinitionId, MyFixedPoint> specialRequests)
+        {
+            var terminalBlock = inventoryInfo.Block as IMyTerminalBlock;
             if (!Util.IsValid(terminalBlock))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} isn't a terminal block");
@@ -178,18 +205,18 @@ namespace CargoSorter
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
                 if (string.IsNullOrWhiteSpace(terminalBlock.CustomData))
                 {
-                    terminalBlock.CustomData = BuildCurrentContentsSpecialData(block, ini);
+                    terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, ini);
                 }
                 else
                 {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{block.DisplayNameText}'");
+                    inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidCustomData;
                     return;
                 }
             }
             if (!ini.ContainsSection("Inventory"))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} has no Inventory config section");
-                terminalBlock.CustomData = BuildCurrentContentsSpecialData(block, ini);
+                terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, ini);
             }
             List<MyIniKey> iniKeys = new List<MyIniKey>();
             ini.GetKeys("Inventory", iniKeys);
@@ -204,7 +231,7 @@ namespace CargoSorter
                 MyDefinitionId definitionId;
                 if (!CargoSorterSessionComponent.Instance.TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                 {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
+                    inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidItem;
                     continue;
                 }
 
@@ -226,7 +253,7 @@ namespace CargoSorter
                     int itemCount;
                     if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                     {
-                        MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{block.DisplayNameText}'");
+                        inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidCount;
                         continue;
                     }
 
@@ -249,14 +276,13 @@ namespace CargoSorter
 
         private string BuildCurrentContentsSpecialData(IMyCubeBlock block, MyIni ini)
         {
-            ini.AddSection("Inventory");
-            var items = new Dictionary<SerializableDefinitionId, MyFixedPoint>();
+            var items = new Dictionary<MyDefinitionId, MyFixedPoint>();
             for (int i = 0; i < block.InventoryCount; i++)
             {
                 var inv = (MyInventory)block.GetInventory(i);
                 foreach (var item in inv.GetItems())
                 {
-                    SerializableDefinitionId id = (SerializableDefinitionId)item.Content.GetId();
+                    MyDefinitionId id = item.Content.GetId();
                     MyFixedPoint amount;
                     items.TryGetValue(id, out amount);
                     amount += item.Amount;
@@ -264,21 +290,7 @@ namespace CargoSorter
                 }
             }
 
-            foreach (var item in items)
-            {
-                string customDataKey;
-                string friendlyType = null;
-                if (CargoSorterSessionComponent.Instance.TryGetFriendlyName(item.Key, out friendlyType))
-                {
-                    customDataKey = $"{friendlyType}/{item.Key.SubtypeName}";
-                }
-                else
-                {
-                    customDataKey = item.Key.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, "");
-                }
-                ini.Set("Inventory", customDataKey, item.Value.ToIntSafe());
-            }
-            return ini.ToString();
+            return BuildCustomData(items, ini);
         }
 
         internal bool CanItemsBeAdded(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
@@ -335,6 +347,30 @@ namespace CargoSorter
                 myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
             }
             return myFixedPoint;
+        }
+
+        internal static string BuildCustomData(Dictionary<MyDefinitionId, MyFixedPoint> items, MyIni ini = null)
+        {
+            if (ini == null)
+            {
+                ini = new MyIni();
+            }
+            ini.AddSection("Inventory");
+            foreach (var item in items)
+            {
+                string customDataKey;
+                string friendlyType;
+                if (CargoSorterSessionComponent.Instance.TryGetFriendlyName(item.Key, out friendlyType))
+                {
+                    customDataKey = $"{friendlyType}/{item.Key.SubtypeName}";
+                }
+                else
+                {
+                    customDataKey = item.Key.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, "");
+                }
+                ini.Set("Inventory", customDataKey, MyFixedPoint.Ceiling(item.Value).ToIntSafe());
+            }
+            return ini.ToString();
         }
     }
 }

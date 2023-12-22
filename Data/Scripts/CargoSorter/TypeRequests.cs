@@ -19,7 +19,17 @@ namespace CargoSorter
         RefineryOre = 1 << 11,
         GasTankBottles = 1 << 12,
         ReactorFuel = 1 << 13,
-        WeaponAmmo = 1 << 14,
+        ConsumableAmmo = 1 << 14,
         SorterItems = 1 << 15,
+    }
+
+    [Flags]
+    public enum RequestValidationStatus : byte
+    {
+        Valid = 0,
+        InvalidItem = 1,
+        TooMuchVolume = 1 << 2,
+        InvalidCustomData = 1 << 3,
+        InvalidCount = 1 << 4,
     }
 }

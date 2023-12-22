@@ -12,6 +12,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 
@@ -30,13 +31,16 @@ namespace CargoSorter
         private readonly HashSet<MyDefinitionId> allTools = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allBottles = new HashSet<MyDefinitionId>();
 
+        private readonly Dictionary<MyDefinitionId, float> allVolumes = new Dictionary<MyDefinitionId, float>();
+        private readonly static Dictionary<MyDefinitionId, bool> blockConveyorSupport = new Dictionary<MyDefinitionId, bool>();
+
         private readonly Dictionary<string, MyDefinitionId> stringPhysicalItemMap = new Dictionary<string, MyDefinitionId>(StringComparer.InvariantCultureIgnoreCase);
 
         private readonly Dictionary<MyObjectBuilderType, string> friendlyTypeNames = new Dictionary<MyObjectBuilderType, string>();
 
         private static readonly MyDefinitionId IgnoredEnergyAmmoDefinitionId = new MyDefinitionId(typeof(MyObjectBuilder_AmmoMagazine), "Energy");
 
-        private Task sortJob;
+        private Task jobTask;
 
         public override void LoadData()
         {
@@ -60,31 +64,37 @@ namespace CargoSorter
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
+                    allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Ore");
                 }
                 if (definition.IsIngot)
                 {
                     allIngots.Add(definition.Id);
+                    allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Ingot");
                 }
                 if (definition is MyUsableItemDefinition || definition is MyDatapadDefinition || definition is MyPackageDefinition || definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
                 {
                     allTools.Add(definition.Id);
+                    allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Item");
                 }
                 if (definition is MyOxygenContainerDefinition)
                 {
                     allBottles.Add(definition.Id);
+                    allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Bottle");
                 }
                 if (definition is MyComponentDefinition)
                 {
                     allComponents.Add(definition.Id);
+                    allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Component");
                 }
                 if (definition is MyAmmoMagazineDefinition)
                 {
                     allAmmo.Add(definition.Id);
+                    allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Ammo");
                 }
             }
@@ -95,6 +105,11 @@ namespace CargoSorter
                     continue;
                 }
                 MakeNormalizedId(definition.PhysicalItemId, "Tool");
+                var handPhysicalItem = MyDefinitionManager.Static.GetPhysicalItemForHandItem(definition.Id);
+                if (handPhysicalItem != null)
+                {
+                    allVolumes.Add(handPhysicalItem.Id, handPhysicalItem.Volume);
+                }
                 allTools.Add(definition.PhysicalItemId);
             }
 
@@ -162,6 +177,18 @@ namespace CargoSorter
             return false;
         }
 
+        public bool TryGetVolume(MyDefinitionId definitionId, out float volume)
+        {
+            if (allVolumes.TryGetValue(definitionId, out volume))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Volume lookup {definitionId} -> {volume}");
+                return true;
+            }
+
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Volume lookup {definitionId} failed");
+            return false;
+        }
+
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
             if (!messageText.StartsWith("/sort", StringComparison.OrdinalIgnoreCase))
@@ -176,20 +203,73 @@ namespace CargoSorter
                 return;
             }
 
-            BeginSortJob(shipController);
+            BeginSortJob(shipController.CubeGrid, ResultsDisplayType.Chat);
         }
 
-        public void BeginSortJob(IMyShipController shipController)
+        public void BeginSortJob(IMyCubeGrid rootGrid, ResultsDisplayType resultsDisplayType)
         {
-            if (sortJob.valid && !sortJob.IsComplete)
+            if (jobTask.valid && !jobTask.IsComplete)
             {
-                MyAPIGateway.Utilities.ShowMessage("Sorter", "Sorting is already in progress!");
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "A job is already in progress!");
+                return;
+            }
+
+            var workData = new CargoSorterWorkData(rootGrid, resultsDisplayType);
+            jobTask = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
+        }
+
+        public void BeginQueueNeededJob(IMyShipController shipController)
+        {
+            if (jobTask.valid && !jobTask.IsComplete)
+            {
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "A job is already in progress!");
                 return;
             }
 
             var workData = new CargoSorterWorkData(shipController.CubeGrid);
-            sortJob = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
+            jobTask = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
         }
+
+        public string GeneratePrerequisiteCustomDataFromQueue(IMyAssembler assembler)
+        {
+            var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
+            var queuePrerequisites = new Dictionary<MyDefinitionId, MyFixedPoint>();
+            foreach (var queuedItem in assembler.GetQueue())
+            {
+                var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
+                if (blueprint == null)
+                {
+                    continue;
+                }
+                foreach (var prerequisite in blueprint.Prerequisites)
+                {
+                    queuePrerequisites[prerequisite.Id] = queuePrerequisites.GetValueOrDefault(prerequisite.Id) + prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
+                }
+            }
+
+            return InventoryInfo.BuildCustomData(queuePrerequisites);
+        }
+
+        public string GenerateResultCustomDataFromQueue(IMyAssembler assembler)
+        {
+            var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
+            var queueResults = new Dictionary<MyDefinitionId, MyFixedPoint>();
+            foreach (var queuedItem in assembler.GetQueue())
+            {
+                var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
+                if (blueprint == null)
+                {
+                    continue;
+                }
+                foreach (var result in blueprint.Results)
+                {
+                    queueResults[result.Id] = queueResults.GetValueOrDefault(result.Id) + result.Amount * queuedItem.Amount;
+                }
+            }
+
+            return InventoryInfo.BuildCustomData(queueResults);
+        }
+
 
         private void SortInventoryAction(WorkData data)
         {
@@ -258,7 +338,6 @@ namespace CargoSorter
                 MyAPIGateway.Utilities.ShowMessage("Sorter", $"Internal error: {ex.Message}");
             }
         }
-
         private void GatherInventory(IEnumerable<IMyTerminalBlock> blocks, CargoSorterWorkData workData)
         {
             foreach (var block in blocks)
@@ -274,16 +353,7 @@ namespace CargoSorter
                     workData.Inventories.Add(inventoryInfo);
                     foreach (var item in inventoryInfo.VirtualInventory)
                     {
-                        MyFixedPoint amount;
-                        if (workData.AvailableForDistribution.TryGetValue(item.Key, out amount))
-                        {
-                            amount += item.Value;
-                        }
-                        else
-                        {
-                            amount = item.Value;
-                        }
-                        workData.AvailableForDistribution[item.Key] = amount;
+                        workData.AvailableForDistribution[item.Key] = workData.AvailableForDistribution.GetValueOrDefault(item.Key) + item.Value;
                     }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special) || inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
                     {
@@ -294,16 +364,8 @@ namespace CargoSorter
                             {
                                 continue;
                             }
-                            MyFixedPoint amount;
-                            if (workData.AvailableForDistribution.TryGetValue(request.Key, out amount))
-                            {
-                                amount -= request.Value;
-                            }
-                            else
-                            {
-                                amount = -request.Value;
-                            }
-                            workData.AvailableForDistribution[request.Key] = amount;
+
+                            workData.AvailableForDistribution[request.Key] = workData.AvailableForDistribution.GetValueOrDefault(request.Key) - request.Value;
                         }
                     }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ReactorFuel))
@@ -320,20 +382,11 @@ namespace CargoSorter
                         }
 
                         var fuelInfo = def.FuelInfos.First();
-                        int amount;
                         var key = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, fuelInfo.FuelId);
-                        if (workData.RequestTypeCount.TryGetValue(key, out amount))
-                        {
-                            amount++;
-                        }
-                        else
-                        {
-                            amount = 1;
-                        }
-                        workData.RequestTypeCount[key] = amount;
+                        workData.RequestTypeCount[key] = workData.RequestTypeCount.GetValueOrDefault(key) + 1;
 
                     }
-                    else if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.WeaponAmmo))
+                    else if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ConsumableAmmo))
                     {
                         if (inventoryInfo.Constraint != null && inventory.Constraint.ConstrainedIds.Count == 1)
                         {
@@ -350,16 +403,7 @@ namespace CargoSorter
                                 continue;
                             }
 
-                            MyFixedPoint amount;
-                            if (workData.AvailableForDistribution.TryGetValue(wantedAmmo, out amount))
-                            {
-                                amount -= wantedAmount;
-                            }
-                            else
-                            {
-                                amount = -wantedAmount;
-                            }
-                            workData.AvailableForDistribution[wantedAmmo] = amount;
+                            workData.AvailableForDistribution[wantedAmmo] = workData.AvailableForDistribution.GetValueOrDefault(wantedAmmo) - wantedAmount;
                         }
                     }
                 }
@@ -367,6 +411,10 @@ namespace CargoSorter
         }
         private bool IsIgnored(IMyTerminalBlock block)
         {
+            if (!HasConveyorSupport(block))
+            {
+                return true;
+            }
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
                 if (block.DisplayNameText.Contains(item))
@@ -535,7 +583,7 @@ namespace CargoSorter
                     {
                         return -currentValue;
                     }
-                    inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+                    virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
                     // <= 0 disables the feature
                     if (Config.GasGeneratorFillPercent <= 0)
@@ -657,7 +705,7 @@ namespace CargoSorter
                          ((float)configuredExpected * reactor.PowerOutputMultiplier)
                         );
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
-                    inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+                    virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
                     if (virtualAmount < expectedAmount * 0.5f)
                     {
@@ -671,7 +719,7 @@ namespace CargoSorter
                     }
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
                     return MyFixedPoint.Zero;
-                case TypeRequests.WeaponAmmo:
+                case TypeRequests.ConsumableAmmo:
                     return inventoryInfo.ComputeAmountThatFits(definitionId);
                 case TypeRequests.Special:
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
@@ -712,7 +760,7 @@ namespace CargoSorter
                 }
 
                 MyFixedPoint virtualAmount;
-                inventoryInfo.VirtualInventory.TryGetValue(definitionId, out virtualAmount);
+                virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
                 if ((!limitedFlag && !minimumFlag) || (limitedFlag && virtualAmount > desiredAmount) || (minimumFlag && virtualAmount < desiredAmount))
                 {
@@ -739,16 +787,14 @@ namespace CargoSorter
 
             operation.Destination.VirtualVolume += operation.Volume;
             operation.Destination.VirtualMass += operation.Mass;
-            MyFixedPoint destChangedAmount;
-            operation.Destination.VirtualInventory.TryGetValue(operation.Item, out destChangedAmount);
-            destChangedAmount += operation.Amount;
+            MyFixedPoint destChangedAmount = operation.Destination.VirtualInventory.GetValueOrDefault(operation.Item) + operation.Amount;
             operation.Destination.VirtualInventory[operation.Item] = destChangedAmount;
             workData.MovementData.Add(operation);
         }
 
         private void SortInventoryCallback(WorkData data)
         {
-            sortJob = new Task();
+            jobTask = new Task();
             var workData = (CargoSorterWorkData)data;
 
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Virtual Inventories after moves:");
@@ -761,36 +807,271 @@ namespace CargoSorter
             //    }
             //}
 
-            var transferRequests = ExecuteMovementData(workData);
-            if (Config.ShowProgressNotifications)
+            var transferRequestCount = ExecuteMovementData(workData);
+            DisplayResults(workData, transferRequestCount);
+        }
+
+        private void DisplayResults(CargoSorterWorkData workData, int transferRequestCount)
+        {
+            var validationFailedBlocks = new Dictionary<IMyCubeBlock, RequestValidationStatus>();
+            foreach (var inventory in workData.Inventories)
             {
-                if (transferRequests == 0)
+                if (inventory.RequestStatus == RequestValidationStatus.Valid || !Util.IsValid(inventory.Block))
                 {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", "No transfers needed.");
+                    continue;
                 }
-                else
-                {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequests} transfers requested.");
-                }
+
+                validationFailedBlocks[inventory.Block] = inventory.RequestStatus;
             }
 
-            if (Config.ShowMissingItems)
+            switch (workData.ResultsType)
             {
-                foreach (var availability in workData.AvailableForDistribution.OrderByDescending(kv => (float)kv.Value))
-                {
-                    if (availability.Value >= MyFixedPoint.Zero)
+                case ResultsDisplayType.Chat:
+                    if (Config.ShowProgressNotifications)
                     {
-                        continue;
+                        if (transferRequestCount == 0)
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", "No transfers needed.");
+                        }
+                        else
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequestCount} transfers requested.");
+                        }
                     }
 
-                    string friendlyName;
-                    if (TryGetFriendlyName(availability.Key, out friendlyName))
+                    foreach (var failedBlock in validationFailedBlocks)
                     {
-                        MyAPIGateway.Utilities.ShowMessage("Needed", $"{Math.Ceiling(-((float)availability.Value))} {friendlyName}/{availability.Key.SubtypeName}");
+                        if (failedBlock.Value.HasFlag(RequestValidationStatus.TooMuchVolume))
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Warning: Requested items on '{failedBlock.Key.DisplayNameText}' will not fit!");
+                        }
+                        if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCustomData))
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{failedBlock.Key.DisplayNameText}'");
+                        }
+                        else if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCount))
+                        {
+                            var ini = new MyIni();
+                            var terminalBlock = failedBlock.Key as IMyTerminalBlock;
+                            if (!Util.IsValid(terminalBlock) || !ini.TryParse(terminalBlock.CustomData))
+                            {
+                                continue;
+                            }
+                            if (!ini.ContainsSection("Inventory"))
+                            {
+                                continue;
+                            }
+
+                            List<MyIniKey> iniKeys = new List<MyIniKey>();
+                            ini.GetKeys("Inventory", iniKeys);
+
+                            foreach (var iniKey in iniKeys)
+                            {
+                                if (iniKey.IsEmpty)
+                                {
+                                    continue;
+                                }
+                                MyDefinitionId definitionId;
+                                if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
+                                {
+                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
+                                    continue;
+                                }
+
+                                var value = ini.Get(iniKey);
+                                var valueString = value.ToString();
+                                if (string.IsNullOrWhiteSpace(valueString))
+                                {
+                                    continue;
+                                }
+
+                                int itemCount;
+                                if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                {
+                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
+                                    continue;
+                                }
+                            }
+                        }
                     }
-                }
+
+                    if (Config.ShowMissingItems)
+                    {
+                        foreach (var availability in workData.AvailableForDistribution.OrderByDescending(kv => (float)kv.Value))
+                        {
+                            if (availability.Value >= MyFixedPoint.Zero)
+                            {
+                                continue;
+                            }
+
+                            string friendlyName;
+                            if (TryGetFriendlyName(availability.Key, out friendlyName))
+                            {
+                                MyAPIGateway.Utilities.ShowMessage("Needed", $"{MyFixedPoint.Ceiling(-availability.Value)} {friendlyName}/{availability.Key.SubtypeName}");
+                            }
+                        }
+                    }
+                    break;
+                case ResultsDisplayType.Window:
+                    var groups = new Dictionary<string, Dictionary<string, MyFixedPoint>>();
+                    StringBuilder warningsBuilder = null;
+                    if (validationFailedBlocks.Count > 0)
+                    {
+                        warningsBuilder = new StringBuilder();
+
+                        foreach (var failedBlock in validationFailedBlocks)
+                        {
+                            warningsBuilder.AppendFormat("{0}:\n", failedBlock.Key.DisplayNameText);
+
+                            if (failedBlock.Value.HasFlag(RequestValidationStatus.TooMuchVolume))
+                            {
+                                warningsBuilder.AppendLine("The block's Custom Data requests more items than can possibly fit in its inventory. Reduce the number of items desired or move the Custom Data, tag and priority to a block with more inventory space.");
+                            }
+                            if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCustomData))
+                            {
+                                warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as an inventory request. Clear the block's Custom Data and set it up again or remove the Limited/Special tag.");
+                            }
+                            else if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCount))
+                            {
+                                warningsBuilder.AppendLine("These lines in the block's Custom Data are not valid:");
+                                var ini = new MyIni();
+                                var terminalBlock = failedBlock.Key as IMyTerminalBlock;
+                                if (!Util.IsValid(terminalBlock) || !ini.TryParse(terminalBlock.CustomData))
+                                {
+                                    continue;
+                                }
+                                if (!ini.ContainsSection("Inventory"))
+                                {
+                                    continue;
+                                }
+
+                                List<MyIniKey> iniKeys = new List<MyIniKey>();
+                                ini.GetKeys("Inventory", iniKeys);
+
+                                foreach (var iniKey in iniKeys)
+                                {
+                                    if (iniKey.IsEmpty)
+                                    {
+                                        continue;
+                                    }
+                                    MyDefinitionId definitionId;
+                                    if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
+                                    {
+                                        warningsBuilder.AppendFormat("Unknown item: {0}", iniKey.Name).AppendLine();
+                                        continue;
+                                    }
+
+                                    var value = ini.Get(iniKey);
+                                    var valueString = value.ToString();
+                                    if (string.IsNullOrWhiteSpace(valueString) || valueString.Equals("All", StringComparison.InvariantCultureIgnoreCase))
+                                    {
+                                        continue;
+                                    }
+
+                                    int itemCount;
+                                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                    {
+                                        warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            warningsBuilder.AppendLine();
+                        }
+                        Util.TrimTrailingWhitespace(warningsBuilder);
+                    }
+
+                    foreach (var availability in workData.AvailableForDistribution)
+                    {
+                        if (availability.Value >= MyFixedPoint.Zero)
+                        {
+                            continue;
+                        }
+                        string friendlyName;
+                        if (TryGetFriendlyName(availability.Key, out friendlyName))
+                        {
+                            var group = groups.GetValueOrNew(friendlyName);
+                            group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
+                            groups[friendlyName] = group;
+                        }
+                    }
+
+                    var displayStringBuilder = new StringBuilder();
+
+                    if (transferRequestCount == 0)
+                    {
+                        displayStringBuilder.Append("No transfers needed.");
+                    }
+                    else
+                    {
+                        displayStringBuilder.AppendFormat("{0} transfers requested.", transferRequestCount);
+                    }
+
+                    if (groups.Count > 0 || warningsBuilder != null)
+                    {
+                        displayStringBuilder.AppendLine();
+                        displayStringBuilder.AppendLine();
+                        if (warningsBuilder != null)
+                        {
+                            displayStringBuilder.AppendLine("Warnings:");
+                            displayStringBuilder.AppendStringBuilder(warningsBuilder);
+                            displayStringBuilder.AppendLine();
+                            displayStringBuilder.AppendLine();
+                        }
+                        if (groups.Count > 0)
+                        {
+                            displayStringBuilder.AppendLine("Missing Items:");
+                            foreach (var group in groups.OrderBy(g => g.Key))
+                            {
+                                displayStringBuilder.AppendFormat("{0}:\n", group.Key);
+                                foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
+                                {
+                                    displayStringBuilder.AppendFormat("{0}: {1}\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                }
+                                displayStringBuilder.AppendLine();
+                            }
+                        }
+                        Util.TrimTrailingWhitespace(displayStringBuilder);
+                    }
+
+                    var stringToShow = "Sorting Complete";
+
+                    if (warningsBuilder != null && groups.Count > 0)
+                    {
+                        stringToShow = "Warnings and Missing Items";
+                    }
+                    else if (warningsBuilder == null && groups.Count > 0)
+                    {
+                        stringToShow = "Missing Items";
+                    }
+                    else if (warningsBuilder != null && groups.Count == 0)
+                    {
+                        stringToShow = "Warnings";
+                    }
+
+                    MyAPIGateway.Utilities.ShowMissionScreen("Inventory Sorter", string.Empty, stringToShow, displayStringBuilder.ToString(), (clickResult) =>
+                    {
+                        if (Config.CopyResultsToClipboard && groups.Count > 0 && clickResult == ResultEnum.OK)
+                        {
+                            var clipboardStringBuilder = new StringBuilder();
+                            foreach (var group in groups.OrderBy(g => g.Key))
+                            {
+                                foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
+                                {
+                                    clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                }
+                            }
+                            MyClipboardHelper.SetClipboard(clipboardStringBuilder.ToString());
+                        }
+                    }, Config.CopyResultsToClipboard && groups.Count > 0 ? "Copy to Clipboard" : null);
+
+                    break;
+                default:
+                    break;
             }
         }
+
         private int ExecuteMovementData(CargoSorterWorkData workData)
         {
             int transferRequests = 0;
@@ -839,6 +1120,11 @@ namespace CargoSorter
             {
                 controls.AddOrInsert(TerminalControls.SortButton, 5);
             }
+            else if (block is IMyAssembler)
+            {
+                controls.Add(TerminalControls.GeneratePrerequisiteCustomDataFromQueue);
+                controls.Add(TerminalControls.GenerateResultCustomDataFromQueue);
+            }
         }
 
         protected override void UnloadData()
@@ -851,6 +1137,36 @@ namespace CargoSorter
             MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             Instance = null;
+        }
+
+        // Copied in part from BuildVision. Thanks Digi!
+        public static bool HasConveyorSupport(IMyCubeBlock block)
+        {
+            if (!Util.IsValid(block))
+            {
+                return false;
+            }
+
+            bool supportsConveyors;
+            if (blockConveyorSupport.TryGetValue(block.BlockDefinition, out supportsConveyors))
+            {
+                return supportsConveyors;
+            }
+
+            var dummies = new Dictionary<string, IMyModelDummy>();
+            block.Model.GetDummies(dummies);
+
+            foreach (var dummy in dummies)
+            {
+                if (dummy.Value.Name.StartsWith("detector_conveyor", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    supportsConveyors = true;
+                    break;
+                }
+            }
+
+            blockConveyorSupport.Add(block.BlockDefinition, supportsConveyors);
+            return supportsConveyors;
         }
     }
 }

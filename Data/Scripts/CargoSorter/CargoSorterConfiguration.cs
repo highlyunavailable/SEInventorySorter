@@ -36,6 +36,7 @@ namespace CargoSorter
         public bool AllowSpecialSteal { get; set; }
         public bool ShowProgressNotifications { get; set; }
         public bool ShowMissingItems { get; set; }
+        public bool CopyResultsToClipboard { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
