@@ -880,7 +880,7 @@ namespace CargoSorter
 
                                 var value = ini.Get(iniKey);
                                 var valueString = value.ToString();
-                                if (string.IsNullOrWhiteSpace(valueString))
+                                if (string.IsNullOrWhiteSpace(valueString) || valueString.Equals("All", StringComparison.InvariantCultureIgnoreCase))
                                 {
                                     continue;
                                 }
