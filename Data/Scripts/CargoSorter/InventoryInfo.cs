@@ -290,6 +290,11 @@ namespace CargoSorter
                 }
             }
 
+            if (items.Count == 0)
+            {
+                return string.Empty;
+            }
+
             return BuildCustomData(items, ini);
         }
 

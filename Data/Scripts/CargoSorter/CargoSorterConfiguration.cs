@@ -45,8 +45,7 @@ namespace CargoSorter
                 try
                 {
                     CargoSorterConfiguration loadedSettings;
-                    using (var reader =
-                           MyAPIGateway.Utilities.ReadFileInLocalStorage(ConfigFileName, typeof(CargoSorterConfiguration)))
+                    using (var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(ConfigFileName, typeof(CargoSorterConfiguration)))
                     {
                         loadedSettings = MyAPIGateway.Utilities.SerializeFromXML<CargoSorterConfiguration>(reader.ReadToEnd());
                     }
@@ -62,16 +61,15 @@ namespace CargoSorter
                 catch (Exception e)
                 {
                     MyLog.Default.WriteLineAndConsole($"CargoSort: Failed to load mod settings: {e.Message}\n{e.StackTrace}");
-                }
-
-                using (var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(ConfigFileName, typeof(CargoSorterConfiguration)))
-                {
-                    var data = reader.ReadToEnd();
-                    if (data.Length > 0)
+                    using (var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(ConfigFileName, typeof(CargoSorterConfiguration)))
                     {
-                        using (var writer = MyAPIGateway.Utilities.WriteBinaryFileInLocalStorage(ConfigFileName + ".old", typeof(CargoSorterConfiguration)))
+                        var data = reader.ReadToEnd();
+                        if (data.Length > 0)
                         {
-                            writer.Write(data);
+                            using (var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(ConfigFileName + ".old", typeof(CargoSorterConfiguration)))
+                            {
+                                writer.Write(data);
+                            }
                         }
                     }
                 }

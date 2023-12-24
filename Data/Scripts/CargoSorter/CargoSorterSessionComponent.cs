@@ -294,11 +294,11 @@ namespace CargoSorter
                 workData.Inventories.SortNoAlloc((InventoryInfo x, InventoryInfo y) =>
                 {
                     // Blocks and specials go first
-                    if (Util.IsSpecial(x.TypeRequests) && !Util.IsSpecial(y.TypeRequests))
+                    if (x.TypeRequests.HasFlag(TypeRequests.Special) && !y.TypeRequests.HasFlag(TypeRequests.Special))
                     {
                         return -1;
                     }
-                    else if (!Util.IsSpecial(x.TypeRequests) && Util.IsSpecial(y.TypeRequests))
+                    else if (!x.TypeRequests.HasFlag(TypeRequests.Special) && y.TypeRequests.HasFlag(TypeRequests.Special))
                     {
                         return 1;
                     }
@@ -365,7 +365,7 @@ namespace CargoSorter
                                 continue;
                             }
 
-                            workData.AvailableForDistribution[request.Key] = workData.AvailableForDistribution.GetValueOrDefault(request.Key) - request.Value;
+                            workData.AvailableForDistribution[request.Key] = workData.AvailableForDistribution.GetValueOrDefault(request.Key) - MyFixedPoint.Floor(request.Value);
                         }
                     }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ReactorFuel))
@@ -517,8 +517,8 @@ namespace CargoSorter
                         continue;
                     }
 
-                    var sourceSpecial = Util.IsSpecial(sourceInventory.TypeRequests);
-                    var destSpecial = Util.IsSpecial(destInventory.TypeRequests);
+                    var sourceSpecial = sourceInventory.TypeRequests.HasFlag(TypeRequests.Special);
+                    var destSpecial = destInventory.TypeRequests.HasFlag(TypeRequests.Special);
 
                     if (sourceSpecial && (!Config.AllowSpecialSteal || !destSpecial))
                     {
