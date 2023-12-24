@@ -354,6 +354,7 @@ namespace CargoSorter
                     foreach (var item in inventoryInfo.VirtualInventory)
                     {
                         workData.AvailableForDistribution[item.Key] = workData.AvailableForDistribution.GetValueOrDefault(item.Key) + item.Value;
+
                     }
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special) || inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
                     {
@@ -365,6 +366,7 @@ namespace CargoSorter
                                 continue;
                             }
 
+                            // Remove any flags from the request before subtracting it from available
                             workData.AvailableForDistribution[request.Key] = workData.AvailableForDistribution.GetValueOrDefault(request.Key) - MyFixedPoint.Floor(request.Value);
                         }
                     }

@@ -17,12 +17,6 @@ namespace CargoSorter
             return obj != null && !obj.MarkedForClose && !obj.Closed;
         }
 
-        // Check to see if the flags are at least the minimum for specials and block requests, above any of the normal requestable flags.
-        public static bool IsSpecial(TypeRequests typeRequests)
-        {
-            return typeRequests.HasFlag(TypeRequests.Special);
-        }
-
         //
         // Summary:
         //     Removes whitespace from the end. Copied because the real one is prohibited
