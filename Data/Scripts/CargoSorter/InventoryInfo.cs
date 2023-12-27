@@ -59,7 +59,7 @@ namespace CargoSorter
                 return;
             }
 
-            if (Block.DisplayNameText.Contains(config.SpecialContainerKeyword))
+            if (Block.DisplayNameText.Contains(config.SpecialContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
             {
                 TypeRequests = TypeRequests.Special;
                 Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
@@ -67,31 +67,31 @@ namespace CargoSorter
             }
             else
             {
-                if (Block.DisplayNameText.Contains(config.OreContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.OreContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Ores;
                 }
-                if (Block.DisplayNameText.Contains(config.IngotContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.IngotContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Ingots;
                 }
-                if (Block.DisplayNameText.Contains(config.ComponentContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.ComponentContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Components;
                 }
-                if (Block.DisplayNameText.Contains(config.ToolContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.ToolContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Tools;
                 }
-                if (Block.DisplayNameText.Contains(config.AmmoContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.AmmoContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Ammo;
                 }
-                if (Block.DisplayNameText.Contains(config.BottleContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.BottleContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Bottles;
                 }
-                if (Block.DisplayNameText.Contains(config.LimitedContainerKeyword))
+                if (Block.DisplayNameText.Contains(config.LimitedContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
                 {
                     TypeRequests |= TypeRequests.Limited;
                     Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
