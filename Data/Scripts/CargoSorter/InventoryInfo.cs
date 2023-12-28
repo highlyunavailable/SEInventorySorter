@@ -59,7 +59,7 @@ namespace CargoSorter
                 return;
             }
 
-            if (Block.DisplayNameText.Contains(config.SpecialContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+            if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
                 Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
@@ -67,31 +67,31 @@ namespace CargoSorter
             }
             else
             {
-                if (Block.DisplayNameText.Contains(config.OreContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.OreContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Ores;
                 }
-                if (Block.DisplayNameText.Contains(config.IngotContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.IngotContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Ingots;
                 }
-                if (Block.DisplayNameText.Contains(config.ComponentContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.ComponentContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Components;
                 }
-                if (Block.DisplayNameText.Contains(config.ToolContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.ToolContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Tools;
                 }
-                if (Block.DisplayNameText.Contains(config.AmmoContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.AmmoContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Ammo;
                 }
-                if (Block.DisplayNameText.Contains(config.BottleContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.BottleContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Bottles;
                 }
-                if (Block.DisplayNameText.Contains(config.LimitedContainerKeyword, StringComparison.InvariantCultureIgnoreCase))
+                if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
                     Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
@@ -143,6 +143,16 @@ namespace CargoSorter
                 {
                     TypeRequests = TypeRequests.AssemblerIngots;
                     Priority = 0;
+
+                    var assemberBlock = Block as IMyTerminalBlock;
+                    if (Util.IsValid(assemberBlock))
+                    {
+                        if (assemberBlock.CustomData.Contains("[Inventory]"))
+                        {
+                            Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                            ParseCustomDataRequests(this, Requests);
+                        }
+                    }
                 }
                 else if (Block is IMyRefinery)
                 {
@@ -184,7 +194,8 @@ namespace CargoSorter
                 }
 
                 float itemVolume;
-                if (CargoSorterSessionComponent.Instance.TryGetVolume(request.Key, out itemVolume)) {
+                if (CargoSorterSessionComponent.Instance.TryGetVolume(request.Key, out itemVolume))
+                {
                     sumVolume += request.Value * itemVolume;
                 }
             }
@@ -363,17 +374,7 @@ namespace CargoSorter
             ini.AddSection("Inventory");
             foreach (var item in items)
             {
-                string customDataKey;
-                string friendlyType;
-                if (CargoSorterSessionComponent.Instance.TryGetFriendlyName(item.Key, out friendlyType))
-                {
-                    customDataKey = $"{friendlyType}/{item.Key.SubtypeName}";
-                }
-                else
-                {
-                    customDataKey = item.Key.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, "");
-                }
-                ini.Set("Inventory", customDataKey, MyFixedPoint.Ceiling(item.Value).ToIntSafe());
+                ini.Set("Inventory", CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(item.Key), MyFixedPoint.Ceiling(item.Value).ToIntSafe());
             }
             return ini.ToString();
         }

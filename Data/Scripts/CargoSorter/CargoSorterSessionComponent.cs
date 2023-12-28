@@ -165,16 +165,22 @@ namespace CargoSorter
             return false;
         }
 
-        public bool TryGetFriendlyName(MyDefinitionId definitionId, out string friendlyName)
+        public string GetFriendlyTypeName(MyDefinitionId definitionId)
         {
+            string friendlyName;
             if (friendlyTypeNames.TryGetValue(definitionId.TypeId, out friendlyName))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Friendly type lookup {definitionId.TypeId} -> {friendlyName}");
-                return true;
+                return friendlyName;
             }
 
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Friendly type lookup {definitionId.TypeId} failed");
-            return false;
+            return definitionId.TypeId.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, "");
+        }
+
+        public string GetFriendlyDefinitionName(MyDefinitionId definitionId)
+        {
+            return $"{GetFriendlyTypeName(definitionId)}/{definitionId.SubtypeName}";
         }
 
         public bool TryGetVolume(MyDefinitionId definitionId, out float volume)
@@ -247,7 +253,14 @@ namespace CargoSorter
                 }
             }
 
-            return InventoryInfo.BuildCustomData(queuePrerequisites);
+            if (queuePrerequisites.Count > 0)
+            {
+                return InventoryInfo.BuildCustomData(queuePrerequisites);
+            }
+            else
+            {
+                return string.Empty;
+            }
         }
 
         public string GenerateResultCustomDataFromQueue(IMyAssembler assembler)
@@ -267,9 +280,71 @@ namespace CargoSorter
                 }
             }
 
-            return InventoryInfo.BuildCustomData(queueResults);
+            if (queueResults.Count > 0)
+            {
+                return InventoryInfo.BuildCustomData(queueResults);
+            }
+            else
+            {
+                return string.Empty;
+            }
         }
 
+        public bool GenerateQueueFromCustomData(IMyAssembler assembler)
+        {
+            var result = new ValueTuple<Dictionary<string, MyFixedPoint>, Dictionary<string, MyFixedPoint>>(new Dictionary<string, MyFixedPoint>(), new Dictionary<string, MyFixedPoint>());
+            var inputInventory = assembler?.InputInventory as MyInventory;
+            if (inputInventory == null)
+            {
+                return false;
+            }
+            var inventoryInfo = new InventoryInfo(inputInventory);
+
+            foreach (var request in inventoryInfo.Requests)
+            {
+                MyBlueprintDefinitionBase blueprintDefinition;
+                if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(request.Key, out blueprintDefinition))
+                {
+                    assembler.AddQueueItem(blueprintDefinition, request.Value);
+                }
+            }
+
+            return true;
+        }
+
+        public string GenerateCustomDataFromProjector(IMyProjector projector)
+        {
+            ProjectorProxy projectorProxy = new ProjectorProxy(projector);
+            if (!projectorProxy.HasBlueprint)
+            {
+                return string.Empty;
+            }
+            List<IMySlimBlock> projectedBlocks = new List<IMySlimBlock>();
+            projectorProxy.GetBlocks(projectedBlocks);
+            var components = new Dictionary<MyDefinitionId, MyFixedPoint>();
+            foreach (var projectedBlock in projectedBlocks)
+            {
+                var blockDef = projectedBlock.BlockDefinition as MyCubeBlockDefinition;
+                if (blockDef == null)
+                {
+                    continue;
+                }
+                foreach (var component in blockDef.Components)
+                {
+                    var amount = components.GetValueOrDefault(component.Definition.Id);
+                    components[component.Definition.Id] = amount + component.Count;
+                }
+            }
+
+            if (components.Count > 0)
+            {
+                return InventoryInfo.BuildCustomData(components);
+            }
+            else
+            {
+                return string.Empty;
+            }
+        }
 
         private void SortInventoryAction(WorkData data)
         {
@@ -282,8 +357,8 @@ namespace CargoSorter
 
                 var nodes = tree.GatherRecursive(c =>
                 {
-                    return c.DisplayNameText?.Contains("[nosort]") == false &&
-                    c.OtherConnector?.CubeGrid?.CustomName?.Contains("[nosort]") == false;
+                    return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
+                    c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
                 });
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
@@ -905,12 +980,7 @@ namespace CargoSorter
                             {
                                 continue;
                             }
-
-                            string friendlyName;
-                            if (TryGetFriendlyName(availability.Key, out friendlyName))
-                            {
-                                MyAPIGateway.Utilities.ShowMessage("Needed", $"{MyFixedPoint.Ceiling(-availability.Value)} {friendlyName}/{availability.Key.SubtypeName}");
-                            }
+                            MyAPIGateway.Utilities.ShowMessage("Needed", $"{MyFixedPoint.Ceiling(-availability.Value)} {GetFriendlyDefinitionName(availability.Key)}");
                         }
                     }
                     break;
@@ -990,13 +1060,10 @@ namespace CargoSorter
                         {
                             continue;
                         }
-                        string friendlyName;
-                        if (TryGetFriendlyName(availability.Key, out friendlyName))
-                        {
-                            var group = groups.GetValueOrNew(friendlyName);
-                            group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
-                            groups[friendlyName] = group;
-                        }
+                        string friendlyName = GetFriendlyTypeName(availability.Key);
+                        var group = groups.GetValueOrNew(friendlyName);
+                        group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
+                        groups[friendlyName] = group;
                     }
 
                     var displayStringBuilder = new StringBuilder();
@@ -1126,6 +1193,11 @@ namespace CargoSorter
             {
                 controls.Add(TerminalControls.GeneratePrerequisiteCustomDataFromQueue);
                 controls.Add(TerminalControls.GenerateResultCustomDataFromQueue);
+                controls.Add(TerminalControls.GenerateQueueFromCustomData);
+            }
+            else if (block is IMyProjector)
+            {
+                controls.Add(TerminalControls.GenerateCustomDataFromProjection);
             }
         }
 

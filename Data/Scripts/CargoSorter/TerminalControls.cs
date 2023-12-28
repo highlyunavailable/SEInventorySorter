@@ -1,10 +1,15 @@
 ﻿using Sandbox.ModAPI.Interfaces.Terminal;
 using Sandbox.ModAPI;
+using Sandbox.Definitions;
 using System.Collections.Generic;
 using System.Text;
 using VRage.Game.ModAPI;
 using VRage.Utils;
 using VRage.Game;
+using VRage;
+using System.Linq;
+using Sandbox.Engine.Utils;
+using System;
 
 namespace CargoSorter.Data.Scripts.CargoSorter
 {
@@ -16,6 +21,8 @@ namespace CargoSorter.Data.Scripts.CargoSorter
         private static IMyTerminalAction SortInventoryAction;
         private static IMyTerminalControlButton GeneratePrerequisiteCustomDataFromQueueButton;
         private static IMyTerminalControlButton GenerateResultCustomDataFromQueueButton;
+        private static IMyTerminalControlButton GenerateQueueFromCustomDataButton;
+        private static IMyTerminalControlButton GenerateCustomDataFromProjectionButton;
 
         public static IMyTerminalControlButton SortButton
         {
@@ -62,6 +69,30 @@ namespace CargoSorter.Data.Scripts.CargoSorter
             }
         }
 
+        public static IMyTerminalControlButton GenerateQueueFromCustomData
+        {
+            get
+            {
+                if (!Done)
+                {
+                    DoOnce();
+                }
+                return GenerateQueueFromCustomDataButton;
+            }
+        }
+
+        public static IMyTerminalControlButton GenerateCustomDataFromProjection
+        {
+            get
+            {
+                if (!Done)
+                {
+                    DoOnce();
+                }
+                return GenerateCustomDataFromProjectionButton;
+            }
+        }
+
         public static void DoOnce()
         {
             if (Done)
@@ -78,7 +109,11 @@ namespace CargoSorter.Data.Scripts.CargoSorter
         private static bool IsControlVisible(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyShipController;
 
         private static bool HasQueueReady(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyAssembler)?.IsQueueEmpty == false;
-
+        private static bool CanMakeQueueFromCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
+            !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.SpecialContainerKeyword) &&
+            !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.LimitedContainerKeyword) &&
+            block.CustomData.Contains("[Inventory]");
+        private static bool HasProjectedGrid(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyProjector)?.ProjectedGrid != null;
 
         private static void CreateActions()
         {
@@ -124,6 +159,22 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 GenerateResultCustomDataFromQueueButton.Enabled = HasQueueReady;
                 GenerateResultCustomDataFromQueueButton.Action = GenerateResultCustomDataFromQueueAction;
             }
+            {
+                GenerateQueueFromCustomDataButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GenerateQueueFromCustomDataButton");
+                GenerateQueueFromCustomDataButton.Title = MyStringId.GetOrCompute("Make Queue from Data");
+                GenerateQueueFromCustomDataButton.Tooltip = MyStringId.GetOrCompute("Queues up items from the Inventory custom data of this assembler");
+                GenerateQueueFromCustomDataButton.SupportsMultipleBlocks = false;
+                GenerateQueueFromCustomDataButton.Enabled = CanMakeQueueFromCustomData;
+                GenerateQueueFromCustomDataButton.Action = QueueFromCustomDataAction;
+            }
+            {
+                GenerateCustomDataFromProjectionButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("CargoSort_GenerateCustomDataFromProjectionButton");
+                GenerateCustomDataFromProjectionButton.Title = MyStringId.GetOrCompute("Make Data from Projection");
+                GenerateCustomDataFromProjectionButton.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data from the projected grid. Paste this into an assembler to queue it!");
+                GenerateCustomDataFromProjectionButton.SupportsMultipleBlocks = false;
+                GenerateCustomDataFromProjectionButton.Enabled = HasProjectedGrid;
+                GenerateCustomDataFromProjectionButton.Action = GenerateCustomDataFromProjectionAction;
+            }
         }
 
         private static void StartSortToolbarAction(IMyTerminalBlock block)
@@ -152,7 +203,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                     {
                         MyClipboardHelper.SetClipboard(data);
                     }
-                }, "Copy to Clipboard");
+                }, !string.IsNullOrWhiteSpace(data) ? "Copy to Clipboard" : null);
             }
         }
 
@@ -167,7 +218,32 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                     {
                         MyClipboardHelper.SetClipboard(data);
                     }
-                }, "Copy to Clipboard");
+                }, !string.IsNullOrWhiteSpace(data) ? "Copy to Clipboard" : null);
+            }
+        }
+
+        private static void QueueFromCustomDataAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null)
+            {
+                var queued = CargoSorterSessionComponent.Instance.GenerateQueueFromCustomData(block as IMyAssembler);
+
+                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", null, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
+            }
+        }
+
+        private static void GenerateCustomDataFromProjectionAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && block is IMyProjector && CargoSorterSessionComponent.Instance != null)
+            {
+                var data = CargoSorterSessionComponent.Instance.GenerateCustomDataFromProjector(block as IMyProjector);
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", $"{block.DisplayNameText}", " Grid Components", data, (clickResult) =>
+                {
+                    if (!string.IsNullOrWhiteSpace(data) && clickResult == ResultEnum.OK)
+                    {
+                        MyClipboardHelper.SetClipboard(data);
+                    }
+                }, !string.IsNullOrWhiteSpace(data) ? "Copy to Clipboard" : null);
             }
         }
     }

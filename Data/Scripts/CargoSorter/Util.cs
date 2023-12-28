@@ -1,4 +1,5 @@
 ﻿using Sandbox.ModAPI;
+using System;
 using System.Text;
 using VRage.ModAPI;
 
@@ -31,5 +32,13 @@ namespace CargoSorter
             sb.Length = num;
             return sb;
         }
+    }
+    public static class UtilExtensions
+    {
+
+        //
+        // Summary:
+        //     Removes whitespace from the end. Copied because the real one is prohibited
+        public static bool InsensitiveContains(this string inString, string value) => inString.IndexOf(value, StringComparison.InvariantCultureIgnoreCase) >= 0;
     }
 }
