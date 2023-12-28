@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
@@ -8,7 +9,6 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.ObjectBuilders;
 
 namespace CargoSorter
 {
@@ -372,9 +372,13 @@ namespace CargoSorter
                 ini = new MyIni();
             }
             ini.AddSection("Inventory");
-            foreach (var item in items)
+            foreach (var item in items
+                .Select(i => new KeyValuePair<string, int>(
+                    CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(i.Key),
+                    MyFixedPoint.Ceiling(i.Value).ToIntSafe()))
+                .OrderBy(i => i.Key))
             {
-                ini.Set("Inventory", CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(item.Key), MyFixedPoint.Ceiling(item.Value).ToIntSafe());
+                ini.Set("Inventory", item.Key, item.Value);
             }
             return ini.ToString();
         }

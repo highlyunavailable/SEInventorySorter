@@ -104,13 +104,13 @@ namespace CargoSorter
                 {
                     continue;
                 }
-                MakeNormalizedId(definition.PhysicalItemId, "Tool");
                 var handPhysicalItem = MyDefinitionManager.Static.GetPhysicalItemForHandItem(definition.Id);
-                if (handPhysicalItem != null)
+                if (handPhysicalItem != null && handPhysicalItem.Enabled && handPhysicalItem.Public)
                 {
+                    MakeNormalizedId(handPhysicalItem.Id, "Tool");
+                    allTools.Add(handPhysicalItem.Id);
                     allVolumes.Add(handPhysicalItem.Id, handPhysicalItem.Volume);
                 }
-                allTools.Add(definition.PhysicalItemId);
             }
 
             //foreach (var item in friendlyTypeNames)
@@ -197,19 +197,33 @@ namespace CargoSorter
 
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
-            if (!messageText.StartsWith("/sort", StringComparison.OrdinalIgnoreCase))
+            if (messageText.StartsWith("/sort", StringComparison.OrdinalIgnoreCase))
             {
-                return;
-            }
-            sendToOthers = false;
-            var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
-            if (shipController == null)
-            {
-                MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to sort!");
-                return;
-            }
+                sendToOthers = false;
+                var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
+                if (shipController == null)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to sort!");
+                    return;
+                }
 
-            BeginSortJob(shipController.CubeGrid, ResultsDisplayType.Chat);
+                BeginSortJob(shipController.CubeGrid, ResultsDisplayType.Chat);
+            }
+            else
+            if (messageText.StartsWith("/getallsortableitems", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+                var allSortable = BuildAllSortableItemNamesString();
+                if (!string.IsNullOrWhiteSpace(allSortable))
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "All sortable items copied to clipboard!");
+                    MyClipboardHelper.SetClipboard(allSortable);
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "No sortable items found to copy to clipboard");
+                }
+            }
         }
 
         public void BeginSortJob(IMyCubeGrid rootGrid, ResultsDisplayType resultsDisplayType)
@@ -1199,6 +1213,63 @@ namespace CargoSorter
             {
                 controls.Add(TerminalControls.GenerateCustomDataFromProjection);
             }
+        }
+
+        private string BuildAllSortableItemNamesString()
+        {
+            var sbMap = new StringBuilder();
+            var sbInv = new StringBuilder();
+            Dictionary<MyDefinitionId, MyFixedPoint> itemIdsForCustomData = new Dictionary<MyDefinitionId, MyFixedPoint>();
+            sbMap.AppendLine("Sortable Items:");
+            sbMap.AppendLine("Sortable ID = Display Name");
+            foreach (var item in MakeSortedIdDefs(allOres))
+            {
+                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+            foreach (var item in MakeSortedIdDefs(allIngots))
+            {
+                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+            foreach (var item in MakeSortedIdDefs(allComponents))
+            {
+                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+            foreach (var item in MakeSortedIdDefs(allAmmo))
+            {
+                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+            foreach (var item in MakeSortedIdDefs(allTools))
+            {
+                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+            foreach (var item in MakeSortedIdDefs(allBottles))
+            {
+                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+
+            sbMap.AppendLine().AppendLine("Inventory Custom Data format:");
+            sbMap.AppendLine("[Inventory]");
+            sbMap.AppendStringBuilder(sbInv);
+            return sbMap.ToString();
+        }
+
+        private IOrderedEnumerable<KeyValuePair<string, string>> MakeSortedIdDefs(IEnumerable<MyDefinitionId> defs)
+        {
+            return defs.Select(i =>
+            {
+                var def = MyDefinitionManager.Static.GetDefinition(i);
+                if (def != null)
+                {
+                    return new KeyValuePair<string, string>(GetFriendlyDefinitionName(i), def.DisplayNameText);
+                }
+                return default(KeyValuePair<string, string>);
+            }).Where(i => !string.IsNullOrEmpty(i.Key)).OrderBy(i => i.Key);
         }
 
         protected override void UnloadData()
