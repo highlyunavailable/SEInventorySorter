@@ -306,7 +306,7 @@ namespace CargoSorter
                 return string.Empty;
             }
 
-            return BuildCustomData(items, ini);
+            return BuildCustomData(items, false, ini);
         }
 
         internal bool CanItemsBeAdded(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
@@ -365,7 +365,7 @@ namespace CargoSorter
             return myFixedPoint;
         }
 
-        internal static string BuildCustomData(Dictionary<MyDefinitionId, MyFixedPoint> items, MyIni ini = null)
+        internal static string BuildCustomData(Dictionary<MyDefinitionId, MyFixedPoint> items, bool ceiling, MyIni ini = null)
         {
             if (ini == null)
             {
@@ -375,7 +375,7 @@ namespace CargoSorter
             foreach (var item in items
                 .Select(i => new KeyValuePair<string, int>(
                     CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(i.Key),
-                    MyFixedPoint.Ceiling(i.Value).ToIntSafe()))
+                    (ceiling ? MyFixedPoint.Ceiling(i.Value) : i.Value).ToIntSafe()))
                 .OrderBy(i => i.Key))
             {
                 ini.Set("Inventory", item.Key, item.Value);

@@ -269,7 +269,7 @@ namespace CargoSorter
 
             if (queuePrerequisites.Count > 0)
             {
-                return InventoryInfo.BuildCustomData(queuePrerequisites);
+                return InventoryInfo.BuildCustomData(queuePrerequisites, true);
             }
             else
             {
@@ -296,7 +296,7 @@ namespace CargoSorter
 
             if (queueResults.Count > 0)
             {
-                return InventoryInfo.BuildCustomData(queueResults);
+                return InventoryInfo.BuildCustomData(queueResults, true);
             }
             else
             {
@@ -352,7 +352,7 @@ namespace CargoSorter
 
             if (components.Count > 0)
             {
-                return InventoryInfo.BuildCustomData(components);
+                return InventoryInfo.BuildCustomData(components, true);
             }
             else
             {
