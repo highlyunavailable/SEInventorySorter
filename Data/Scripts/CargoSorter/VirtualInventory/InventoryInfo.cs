@@ -14,19 +14,15 @@ namespace CargoSorter
 {
     public class InventoryInfo
     {
-        public static readonly MyFixedPoint FixedPointFlagSpecialMinimum = MyFixedPoint.SmallestPossibleValue * (1 << 0x3);
-        public static readonly MyFixedPoint FixedPointFlagSpecialLimited = MyFixedPoint.SmallestPossibleValue * (1 << 0x4);
-
         public byte Priority;
         public TypeRequests TypeRequests;
-        public Dictionary<MyDefinitionId, MyFixedPoint> Requests;
+        public Dictionary<MyDefinitionId, RequestData> Requests;
         public RequestValidationStatus RequestStatus;
         public Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
         public MyFixedPoint VirtualVolume;
         public MyFixedPoint VirtualMass;
         public readonly MyFixedPoint MaxVolume;
         public readonly MyFixedPoint MaxMass;
-        public readonly bool IsConstrained;
         public readonly MyInventoryConstraint Constraint;
         public readonly MyInventory RealInventory;
         public readonly IMyCubeBlock Block;
@@ -40,7 +36,6 @@ namespace CargoSorter
             VirtualMass = realInventory.CurrentMass - realInventory.ExternalMass;
             MaxVolume = realInventory.MaxVolume;
             MaxMass = realInventory.MaxMass;
-            IsConstrained = realInventory.IsConstrained;
             Constraint = realInventory.Constraint;
             RealInventory = realInventory;
 
@@ -62,7 +57,7 @@ namespace CargoSorter
             if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
-                Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                Requests = new Dictionary<MyDefinitionId, RequestData>();
                 ParseCustomDataRequests(this, Requests);
             }
             else
@@ -94,7 +89,7 @@ namespace CargoSorter
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
-                    Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                    Requests = new Dictionary<MyDefinitionId, RequestData>();
                     ParseCustomDataRequests(this, Requests);
                 }
             }
@@ -149,7 +144,7 @@ namespace CargoSorter
                     {
                         if (assemberBlock.CustomData.Contains("[Inventory]"))
                         {
-                            Requests = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                            Requests = new Dictionary<MyDefinitionId, RequestData>();
                             ParseCustomDataRequests(this, Requests);
                         }
                     }
@@ -175,20 +170,21 @@ namespace CargoSorter
                 }
                 else if (Block is IMyConveyorSorter)
                 {
-                    // If it doesn't contain Sorter in the name, it's probably a weaponcore weapon.
-                    TypeRequests = Block.BlockDefinition.SubtypeId.Contains("Sorter") ? TypeRequests.SorterItems : TypeRequests.ConsumableAmmo;
+                    TypeRequests = CargoSorterSessionComponent.Instance.IsSorter(Block as IMyConveyorSorter) ?
+                        TypeRequests.SorterItems :
+                        TypeRequests.ConsumableAmmo;
                     Priority = 0;
                 }
             }
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
         }
 
-        private bool CanRequestsFit(Dictionary<MyDefinitionId, MyFixedPoint> requests, MyFixedPoint maxVolume)
+        private bool CanRequestsFit(Dictionary<MyDefinitionId, RequestData> requests, MyFixedPoint maxVolume)
         {
             MyFixedPoint sumVolume = MyFixedPoint.Zero;
             foreach (var request in requests)
             {
-                if (request.Value == MyFixedPoint.MaxValue) // It's an All request, skip it.
+                if (request.Value.Flag == RequestFlags.All) // It's an All request, skip it.
                 {
                     continue;
                 }
@@ -196,13 +192,13 @@ namespace CargoSorter
                 float itemVolume;
                 if (CargoSorterSessionComponent.Instance.TryGetVolume(request.Key, out itemVolume))
                 {
-                    sumVolume += request.Value * itemVolume;
+                    sumVolume += request.Value.Amount * itemVolume;
                 }
             }
             return sumVolume <= maxVolume;
         }
 
-        private void ParseCustomDataRequests(InventoryInfo inventoryInfo, Dictionary<MyDefinitionId, MyFixedPoint> specialRequests)
+        private void ParseCustomDataRequests(InventoryInfo inventoryInfo, Dictionary<MyDefinitionId, RequestData> specialRequests)
         {
             var terminalBlock = inventoryInfo.Block as IMyTerminalBlock;
             if (!Util.IsValid(terminalBlock))
@@ -251,13 +247,13 @@ namespace CargoSorter
                 var valueString = value.ToString();
                 if (string.IsNullOrWhiteSpace(valueString))
                 {
-                    specialRequests[definitionId] = 0;
+                    specialRequests[definitionId] = new RequestData(0, RequestFlags.None);
                 }
                 else
                 {
                     if (valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
                     {
-                        specialRequests[definitionId] = MyFixedPoint.MaxValue;
+                        specialRequests[definitionId] = new RequestData(ComputeAmountThatCouldFit(definitionId), RequestFlags.All);
                         continue;
                     }
 
@@ -268,19 +264,18 @@ namespace CargoSorter
                         continue;
                     }
 
-                    var fixedPointValue = (MyFixedPoint)itemCount;
+                    var requestValue = new RequestData(itemCount, RequestFlags.None);
 
                     var lastChar = valueString[valueString.Length - 1];
                     if (lastChar == 'L' || lastChar == 'l')
                     {
-                        fixedPointValue += FixedPointFlagSpecialLimited;
-
+                        requestValue.Flag = RequestFlags.Limit;
                     }
                     else if (lastChar == 'M' || lastChar == 'm')
                     {
-                        fixedPointValue += FixedPointFlagSpecialMinimum;
+                        requestValue.Flag = RequestFlags.Minimum;
                     }
-                    specialRequests[definitionId] = fixedPointValue;
+                    specialRequests[definitionId] = requestValue;
                 }
             }
         }
@@ -320,15 +315,11 @@ namespace CargoSorter
             }
             volumeToBeMoved = amount * physItem.Volume;
             massToBeMoved = amount * physItem.Mass;
-            return (!IsConstrained || !(volumeToBeMoved + VirtualVolume > MaxVolume)) && !(massToBeMoved + VirtualMass > MaxMass);
+            return !(volumeToBeMoved + VirtualVolume > MaxVolume) && !(massToBeMoved + VirtualMass > MaxMass);
         }
 
         internal MyFixedPoint ComputeAmountThatFits(MyDefinitionId contentId, bool forceIntegralAmount = false)
         {
-            if (!IsConstrained)
-            {
-                return MyFixedPoint.MaxValue;
-            }
             MyPhysicalItemDefinition physItem;
             if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(contentId, out physItem))
             {
@@ -346,10 +337,6 @@ namespace CargoSorter
 
         internal MyFixedPoint ComputeAmountThatCouldFit(MyDefinitionId contentId, bool forceIntegralAmount = false, float volumeReserved = 0f, float massReserved = 0f)
         {
-            if (!IsConstrained)
-            {
-                return MyFixedPoint.MaxValue;
-            }
             MyPhysicalItemDefinition physItem;
             if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(contentId, out physItem))
             {
