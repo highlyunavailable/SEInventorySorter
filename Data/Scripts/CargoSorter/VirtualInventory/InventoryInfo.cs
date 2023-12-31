@@ -304,7 +304,7 @@ namespace CargoSorter
             return BuildCustomData(items, false, ini);
         }
 
-        internal bool CanItemsBeAdded(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
+        internal bool CanItemsFit(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
         {
             MyPhysicalItemDefinition physItem;
             if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(itemDefinition, out physItem))
@@ -327,12 +327,12 @@ namespace CargoSorter
             }
             MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)VirtualVolume) / (double)physItem.Volume), 0);
             MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)VirtualMass) / (double)physItem.Mass), 0);
-            MyFixedPoint myFixedPoint = MyFixedPoint.Min(a, b);
+            MyFixedPoint amount = MyFixedPoint.Min(a, b);
             if (physItem.HasIntegralAmounts || forceIntegralAmount)
             {
-                myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
+                amount = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)amount * 1000.0) / 1000.0));
             }
-            return myFixedPoint;
+            return amount;
         }
 
         internal MyFixedPoint ComputeAmountThatCouldFit(MyDefinitionId contentId, bool forceIntegralAmount = false, float volumeReserved = 0f, float massReserved = 0f)

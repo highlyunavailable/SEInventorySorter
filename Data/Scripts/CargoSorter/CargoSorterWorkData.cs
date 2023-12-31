@@ -21,6 +21,7 @@ namespace CargoSorter
         internal readonly IMyCubeGrid RootGrid;
         internal readonly Dictionary<MyDefinitionId, MyFixedPoint> AvailableForDistribution = new Dictionary<MyDefinitionId, MyFixedPoint>();
         internal readonly Dictionary<ValueTuple<TypeRequests, MyDefinitionId>, int> RequestTypeCount = new Dictionary<ValueTuple<TypeRequests, MyDefinitionId>, int>();
+        internal readonly Dictionary<MyDefinitionId, List<ExcessInfo>> ExcessPools = new Dictionary<MyDefinitionId, List<ExcessInfo>>();
 
         public CargoSorterWorkData(IMyCubeGrid cubeGrid, ResultsDisplayType resultsDisplayType = ResultsDisplayType.Chat)
         {
