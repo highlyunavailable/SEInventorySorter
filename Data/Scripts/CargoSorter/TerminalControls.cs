@@ -6,7 +6,7 @@ using VRage.Game.ModAPI;
 using VRage.Utils;
 using VRage.Game;
 
-namespace CargoSorter.Data.Scripts.CargoSorter
+namespace CargoSorter
 {
     public static class TerminalControls
     {

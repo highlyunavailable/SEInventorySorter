@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using CargoSorter.Data.Scripts.CargoSorter;
 using CoreSystems.Api;
 using ParallelTasks;
 using Sandbox.Definitions;
@@ -546,7 +545,7 @@ namespace CargoSorter
         }
         private bool IsIgnored(IMyTerminalBlock block)
         {
-            if (!HasConveyorSupport(block))
+            if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block))
             {
                 return true;
             }
@@ -636,7 +635,7 @@ namespace CargoSorter
                             continue;
                         }
 
-                        if (!sourcePBInv.CanTransferItemTo(destPBInv, pool.Key))
+                        if (!Config.SkipVerifyConveyorConnection && !sourcePBInv.CanTransferItemTo(destPBInv, pool.Key))
                         {
                             continue;
                         }
@@ -726,7 +725,7 @@ namespace CargoSorter
                         }
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
                         MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
-                        if (amountToBeMoved <= MyFixedPoint.Zero || !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
+                        if (amountToBeMoved <= MyFixedPoint.Zero || (!Config.SkipVerifyConveyorConnection && !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey)))
                         {
                             continue;
                         }

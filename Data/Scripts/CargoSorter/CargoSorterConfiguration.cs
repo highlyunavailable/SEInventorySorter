@@ -19,7 +19,7 @@ namespace CargoSorter
         public const string defaultToolContainerKeyword = "Tools";
         public const string defaultAmmoContainerKeyword = "Ammo";
         public const string defaultBottleContainerKeyword = "Bottles";
-        public static readonly string[] defaultLockedContainerKeywords = { "Lock", "Seat", "Control Station", "Hidden", "!manual" };
+        public static readonly string[] defaultLockedContainerKeywords = { "Locked", "Hidden", "!manual" };
 
         public string SpecialContainerKeyword { get; set; }
         public string LimitedContainerKeyword { get; set; }
@@ -37,6 +37,7 @@ namespace CargoSorter
         public bool ShowProgressNotifications { get; set; }
         public bool ShowMissingItems { get; set; }
         public bool CopyResultsToClipboard { get; set; }
+        public bool SkipVerifyConveyorConnection { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
@@ -129,6 +130,7 @@ namespace CargoSorter
             AllowSpecialSteal = true;
             ShowProgressNotifications = true;
             ShowMissingItems = true;
+            SkipVerifyConveyorConnection = false;
         }
     }
 }
