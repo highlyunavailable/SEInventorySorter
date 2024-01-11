@@ -545,13 +545,13 @@ namespace CargoSorter
         }
         private bool IsIgnored(IMyTerminalBlock block)
         {
-            if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block))
+            if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block) && !(block.DisplayNameText.InsensitiveContains(Config.SpecialContainerKeyword) || block.DisplayNameText.InsensitiveContains(Config.LimitedContainerKeyword)))
             {
                 return true;
             }
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
-                if (block.DisplayNameText.Contains(item))
+                if (block.DisplayNameText.InsensitiveContains(item))
                 {
                     return true;
                 }
@@ -1280,9 +1280,11 @@ namespace CargoSorter
             }
             else if (block is IMyAssembler)
             {
+                controls.EnsureCapacity(controls.Count + 4);
                 controls.Add(TerminalControls.GeneratePrerequisiteCustomDataFromQueue);
                 controls.Add(TerminalControls.GenerateResultCustomDataFromQueue);
                 controls.Add(TerminalControls.GenerateQueueFromCustomData);
+                controls.Add(TerminalControls.ClearAssemblerQueue);
             }
             else if (block is IMyProjector)
             {

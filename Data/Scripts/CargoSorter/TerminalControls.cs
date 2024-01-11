@@ -17,6 +17,7 @@ namespace CargoSorter
         private static IMyTerminalControlButton GeneratePrerequisiteCustomDataFromQueueButton;
         private static IMyTerminalControlButton GenerateResultCustomDataFromQueueButton;
         private static IMyTerminalControlButton GenerateQueueFromCustomDataButton;
+        private static IMyTerminalControlButton ClearAssemblerQueueButton;
         private static IMyTerminalControlButton GenerateCustomDataFromProjectionButton;
 
         public static IMyTerminalControlButton SortButton
@@ -73,6 +74,17 @@ namespace CargoSorter
                     DoOnce();
                 }
                 return GenerateQueueFromCustomDataButton;
+            }
+        }
+        public static IMyTerminalControlButton ClearAssemblerQueue
+        {
+            get
+            {
+                if (!Done)
+                {
+                    DoOnce();
+                }
+                return ClearAssemblerQueueButton;
             }
         }
 
@@ -163,6 +175,13 @@ namespace CargoSorter
                 GenerateQueueFromCustomDataButton.Action = QueueFromCustomDataAction;
             }
             {
+                GenerateQueueFromCustomDataButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
+                GenerateQueueFromCustomDataButton.Title = MyStringId.GetOrCompute("Clear Queue");
+                GenerateQueueFromCustomDataButton.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
+                GenerateQueueFromCustomDataButton.SupportsMultipleBlocks = true;
+                GenerateQueueFromCustomDataButton.Action = ClearAssemblerQueueAction;
+            }
+            {
                 GenerateCustomDataFromProjectionButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("CargoSort_GenerateCustomDataFromProjectionButton");
                 GenerateCustomDataFromProjectionButton.Title = MyStringId.GetOrCompute("Make Data from Projection");
                 GenerateCustomDataFromProjectionButton.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data from the projected grid. Paste this into an assembler to queue it!");
@@ -224,6 +243,14 @@ namespace CargoSorter
                 var queued = CargoSorterSessionComponent.Instance.GenerateQueueFromCustomData(block as IMyAssembler);
 
                 MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", null, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
+            }
+        }
+        private static void ClearAssemblerQueueAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && block is IMyAssembler)
+            {
+                var assembler = block as IMyAssembler;
+                assembler.ClearQueue();
             }
         }
 
