@@ -545,13 +545,13 @@ namespace CargoSorter
         }
         private bool IsIgnored(IMyTerminalBlock block)
         {
-            if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block))
+            if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block) && !(block.DisplayNameText.InsensitiveContains(Config.SpecialContainerKeyword) || block.DisplayNameText.InsensitiveContains(Config.LimitedContainerKeyword)))
             {
                 return true;
             }
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
-                if (block.DisplayNameText.Contains(item))
+                if (block.DisplayNameText.InsensitiveContains(item))
                 {
                     return true;
                 }
