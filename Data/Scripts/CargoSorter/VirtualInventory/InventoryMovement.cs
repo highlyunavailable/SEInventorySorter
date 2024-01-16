@@ -25,7 +25,7 @@ namespace CargoSorter
 
         public override string ToString()
         {
-            return $"{(Source?.RealInventory?.Entity as IMyCubeBlock)?.DisplayNameText ?? "(NULL)"} -> {(Destination?.RealInventory?.Entity as IMyCubeBlock)?.DisplayNameText ?? "(NULL)"} : {Item} - {Amount} V: {Volume * 1000}m3 M: {Mass}kg";
+            return $"{Source?.Block?.DisplayNameText ?? "(NULL)"} -> {Destination?.Block?.DisplayNameText ?? "(NULL)"} : {Item} - {Amount} V: {Volume * 1000}m3 M: {Mass}kg";
         }
     }
 }

@@ -680,6 +680,13 @@ namespace CargoSorter
                     continue;
                 }
 
+                // Don't steal items from draining conveyor sorters, they'll just take them back.
+                if (sourceInventory.TypeRequests.HasFlag(TypeRequests.SorterItems) && (sourceInventory.Block as IMyConveyorSorter)?.DrainAll == true)
+                {
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
+                    continue;
+                }
+
                 inventoryKeys.Clear();
                 inventoryKeys.AddRange(sourceInventory.VirtualInventory.Keys);
                 for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
@@ -775,7 +782,7 @@ namespace CargoSorter
                         (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
                         : MyFixedPoint.Zero;
                 case TypeRequests.AssemblerIngots:
-                    var assembler = inventoryInfo.RealInventory?.Entity as IMyAssembler;
+                    var assembler = inventoryInfo.Block as IMyAssembler;
                     // Make sure the output inventory is clear in normal operation.
                     if (assembler != null && assembler.IsProducing && assembler.Enabled)
                     {
@@ -831,7 +838,7 @@ namespace CargoSorter
                     // If the assembler is off or full somehow, just take everything out.
                     return -currentValue;
                 case TypeRequests.RefineryOre:
-                    var refinery = inventoryInfo.RealInventory?.Entity as IMyRefinery;
+                    var refinery = inventoryInfo.Block as IMyRefinery;
                     if (refinery != null)
                     {
                         var inputConstraint = ((MyInventory)refinery.InputInventory)?.Constraint;
@@ -847,10 +854,22 @@ namespace CargoSorter
                     // Remove all bottles from tanks
                     return -currentValue;
                 case TypeRequests.SorterItems:
-                    var sorter = inventoryInfo.RealInventory?.Entity as IMyConveyorSorter;
-                    return sorter != null && sorter.DrainAll ? MyFixedPoint.Zero : -currentValue;
+                    var sorter = inventoryInfo.Block as IMyConveyorSorter;
+                    if (sorter != null)
+                    {
+                        if (sorter.DrainAll)
+                        {
+                            return MyFixedPoint.Zero;
+                        }
+                        // If additional flags exist, let them be handled
+                        if (inventoryInfo.TypeRequests != TypeRequests.SorterItems)
+                        {
+                            goto default;
+                        }
+                    }
+                    return -currentValue;
                 case TypeRequests.ReactorFuel:
-                    var reactor = inventoryInfo.RealInventory?.Entity as IMyReactor;
+                    var reactor = inventoryInfo.Block as IMyReactor;
                     if (reactor == null)
                     {
                         return -currentValue;
@@ -898,6 +917,11 @@ namespace CargoSorter
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
                     return MyFixedPoint.Zero;
                 case TypeRequests.ConsumableAmmo:
+                    // If additional flags exist, let them be handled
+                    if (inventoryInfo.TypeRequests != TypeRequests.ConsumableAmmo)
+                    {
+                        goto default;
+                    }
                     return inventoryInfo.ComputeAmountThatFits(definitionId);
                 case TypeRequests.Special:
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
@@ -966,10 +990,10 @@ namespace CargoSorter
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Virtual Inventories after moves:");
             //foreach (var inventory in workData.Inventories)
             //{
-            //    MyLog.Default.WriteLineAndConsole($"CargoSort: {(inventory.RealInventory?.Entity as IMyCubeBlock).DisplayNameText}: Virtual Volume {inventory.VirtualVolume}, Virtual Mass {inventory.VirtualMass}, Contents:");
+            //    MyLog.Default.WriteLineAndConsole($"CargoSort: {inventory.Block?.DisplayNameText}: Virtual Volume {inventory.VirtualVolume}, Virtual Mass {inventory.VirtualMass}, Contents:");
             //    foreach (var item in inventory.VirtualInventory)
             //    {
-            //        MyLog.Default.WriteLineAndConsole($"CargoSort: {(inventory.RealInventory?.Entity as IMyCubeBlock).DisplayNameText}: {item.Key} : {item.Value}");
+            //        MyLog.Default.WriteLineAndConsole($"CargoSort: {inventory.Block?.DisplayNameText}: {item.Key} : {item.Value}");
             //    }
             //}
 
@@ -1236,7 +1260,7 @@ namespace CargoSorter
             List<KeyValuePair<uint, MyFixedPoint>> itemOps = new List<KeyValuePair<uint, MyFixedPoint>>();
             foreach (var movement in workData.MovementData)
             {
-                if (!Util.IsValid(movement.Source.RealInventory?.Entity) || !Util.IsValid(movement.Destination.RealInventory?.Entity))
+                if (!Util.IsValid(movement.Source.Block) || !Util.IsValid(movement.Destination.Block))
                 {
                     continue;
                 }
@@ -1251,7 +1275,7 @@ namespace CargoSorter
                         continue;
                     }
                     var toTransfer = MyFixedPoint.Min(item.Amount, needToMove);
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {(movement.Source.RealInventory?.Entity as IMyCubeBlock).DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {(movement.Destination.RealInventory?.Entity as IMyCubeBlock).DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
                     transferRequests++;
                     needToMove -= toTransfer;

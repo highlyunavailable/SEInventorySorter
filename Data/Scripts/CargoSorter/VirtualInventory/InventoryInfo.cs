@@ -168,13 +168,16 @@ namespace CargoSorter
                     TypeRequests = TypeRequests.ConsumableAmmo;
                     Priority = 0;
                 }
-                else if (Block is IMyConveyorSorter)
-                {
-                    TypeRequests = CargoSorterSessionComponent.Instance.IsSorter(Block as IMyConveyorSorter) ?
-                        TypeRequests.SorterItems :
-                        TypeRequests.ConsumableAmmo;
-                    Priority = 0;
-                }
+            }
+
+            // Always mark sorters as having SorterItems request types
+            if (Block is IMyConveyorSorter)
+            {
+                TypeRequests |= CargoSorterSessionComponent.Instance.IsSorter(Block as IMyConveyorSorter) ?
+                    TypeRequests.SorterItems :
+                    TypeRequests.ConsumableAmmo;
+
+                if (Priority == byte.MaxValue) { Priority = 0; }
             }
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
         }
