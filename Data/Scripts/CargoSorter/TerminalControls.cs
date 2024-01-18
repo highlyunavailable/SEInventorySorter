@@ -250,7 +250,15 @@ namespace CargoSorter
             if (Util.IsValid(block) && block is IMyAssembler)
             {
                 var assembler = block as IMyAssembler;
-                assembler.ClearQueue();
+                if (assembler.IsQueueEmpty)
+                {
+                    return;
+                }
+                var queue = assembler.GetQueue();
+                for (int i = queue.Count - 1; i >= 0; i--)
+                {
+                    assembler.RemoveQueueItem(i, queue[i].Amount);
+                }
             }
         }
 
