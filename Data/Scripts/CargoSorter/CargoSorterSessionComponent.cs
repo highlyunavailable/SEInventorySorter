@@ -448,6 +448,7 @@ namespace CargoSorter
                 BuildExcessItemPool(workData);
                 BuildExcessItemMovement(workData);
                 BuildDesiredItemMovement(workData);
+                BuildExcessFallback(workData);
 
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement Data {workData.MovementData.Count} ops:\n{string.Join("\n", workData.MovementData)}");
             }
@@ -584,8 +585,6 @@ namespace CargoSorter
         private void BuildExcessItemMovement(CargoSorterWorkData workData)
         {
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Removing excess items");
-            List<MyDefinitionId> inventoryKeys = new List<MyDefinitionId>();
-
             for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
             {
                 var destInventory = workData.Inventories[destInvIndex];
@@ -751,6 +750,103 @@ namespace CargoSorter
                 }
             }
         }
+        private void BuildExcessFallback(CargoSorterWorkData workData)
+        {
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Moving remaining excess items to minimums");
+            for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
+            {
+                var destInventory = workData.Inventories[destInvIndex];
+
+                if (destInventory.Requests.Count == 0)
+                {
+                    continue;
+                }
+
+                if (!destInventory.TypeRequests.HasFlag(TypeRequests.Special) && !destInventory.TypeRequests.HasFlag(TypeRequests.Limited))
+                {
+                    continue;
+                }
+
+                var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
+
+                foreach (var pool in workData.ExcessPools)
+                {
+                    RequestData requestData;
+                    if (!destInventory.Requests.TryGetValue(pool.Key, out requestData) || requestData.Flag != RequestFlags.Minimum)
+                    {
+                        continue;
+                    }
+
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv request handling excess {pool.Key} flags: {requestData.Flag}");
+
+                    var destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(pool.Key);
+                    var amountWanted = destInventory.ComputeAmountThatFits(pool.Key, true);
+                    // We don't want this item or we can't fit any more
+                    if (amountWanted <= MyFixedPoint.Zero)
+                    {
+                        continue;
+                    }
+
+                    for (int i = pool.Value.Count - 1; i >= 0; i--)
+                    {
+                        var inventoryExcess = pool.Value[i];
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Excess AmountToBeMoved");
+                        MyFixedPoint amountToBeMoved = MyFixedPoint.Min(amountWanted, inventoryExcess.Amount);
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {pool.Key}: {amountToBeMoved} amountWanted {amountWanted}");
+                        if (amountToBeMoved <= MyFixedPoint.Zero)
+                        {
+                            break;
+                        }
+
+                        MyFixedPoint volumeToBeMoved;
+                        MyFixedPoint massToBeMoved;
+                        if (!destInventory.CanItemsFit(amountToBeMoved, pool.Key, out volumeToBeMoved, out massToBeMoved))
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {pool.Key} with amount {amountToBeMoved} to inventory");
+                            break;
+                        }
+
+                        var sourceInventory = inventoryExcess.Inventory;
+                        var sourcePBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)sourceInventory.RealInventory;
+
+                        if (sourceInventory.VirtualInventory.GetValueOrDefault(pool.Key) < amountToBeMoved)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Source inventory {sourceInventory.Block?.DisplayNameText} is missing {pool.Key} with amount {amountToBeMoved} to inventory");
+                            continue;
+                        }
+
+                        if (!Config.SkipVerifyConveyorConnection && !sourcePBInv.CanTransferItemTo(destPBInv, pool.Key))
+                        {
+                            continue;
+                        }
+
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
+                        AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, pool.Key, amountToBeMoved, volumeToBeMoved, massToBeMoved));
+                        // Decrement the excess pool.
+                        if (inventoryExcess.Amount <= amountToBeMoved)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Pool {pool.Key} source {sourceInventory.Block?.DisplayNameText} empty, removing");
+                            pool.Value.RemoveAtFast(i);
+                        }
+                        else
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Pool {pool.Key} source {sourceInventory.Block?.DisplayNameText} lost some but not all, now {inventoryExcess.Amount}");
+                            inventoryExcess.Amount -= amountToBeMoved;
+                            pool.Value[i] = inventoryExcess;
+                        }
+                        // Recalculate how much is needed and bail out of we don't want any more
+                        destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(pool.Key);
+                        amountWanted = destInventory.ComputeAmountThatFits(pool.Key, true);
+                        if (amountWanted <= MyFixedPoint.Zero)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         private MyFixedPoint CalculateAmountWanted(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue, CargoSorterWorkData workData)
         {
             if (inventoryInfo.Constraint != null && !inventoryInfo.Constraint.Check(definitionId))
