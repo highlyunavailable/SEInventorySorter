@@ -9,11 +9,13 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Utils;
 
 namespace CargoSorter
 {
     public class InventoryInfo
     {
+        private static readonly MyIni iniParser = new MyIni();
         public byte Priority;
         public TypeRequests TypeRequests;
         public Dictionary<MyDefinitionId, RequestData> Requests;
@@ -27,7 +29,7 @@ namespace CargoSorter
         public readonly MyInventory RealInventory;
         public readonly IMyCubeBlock Block;
 
-        public InventoryInfo(MyInventory realInventory)
+        public InventoryInfo(MyInventory realInventory, string profile)
         {
             Block = realInventory.Entity as IMyCubeBlock;
             Priority = byte.MaxValue;
@@ -57,41 +59,52 @@ namespace CargoSorter
             if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
-                Requests = new Dictionary<MyDefinitionId, RequestData>();
-                ParseCustomDataRequests(this, Requests);
+                ParseCustomDataRequests(this, null);
             }
             else
             {
-                if (Block.DisplayNameText.InsensitiveContains(config.OreContainerKeyword))
+                if (Block.DisplayNameText.InsensitiveContains(config.AnyContainerKeyword))
                 {
-                    TypeRequests |= TypeRequests.Ores;
+                    TypeRequests = TypeRequests.Ores | TypeRequests.Ingots | TypeRequests.Components | TypeRequests.Tools | TypeRequests.Ammo | TypeRequests.Bottles;
                 }
-                if (Block.DisplayNameText.InsensitiveContains(config.IngotContainerKeyword))
+                else
                 {
-                    TypeRequests |= TypeRequests.Ingots;
-                }
-                if (Block.DisplayNameText.InsensitiveContains(config.ComponentContainerKeyword))
-                {
-                    TypeRequests |= TypeRequests.Components;
-                }
-                if (Block.DisplayNameText.InsensitiveContains(config.ToolContainerKeyword))
-                {
-                    TypeRequests |= TypeRequests.Tools;
-                }
-                if (Block.DisplayNameText.InsensitiveContains(config.AmmoContainerKeyword))
-                {
-                    TypeRequests |= TypeRequests.Ammo;
-                }
-                if (Block.DisplayNameText.InsensitiveContains(config.BottleContainerKeyword))
-                {
-                    TypeRequests |= TypeRequests.Bottles;
+                    if (Block.DisplayNameText.InsensitiveContains(config.OreContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Ores;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.IngotContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Ingots;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.ComponentContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Components;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.ToolContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Tools;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.AmmoContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Ammo;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.BottleContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Bottles;
+                    }
                 }
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
-                    Requests = new Dictionary<MyDefinitionId, RequestData>();
-                    ParseCustomDataRequests(this, Requests);
+                    ParseCustomDataRequests(this, null);
                 }
+            }
+            if (!string.IsNullOrEmpty(profile) && Block.DisplayNameText.InsensitiveContains(profile))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort ({profile}): {Block.DisplayNameText}");
+                TypeRequests = TypeRequests.Special;
+                ParseCustomDataRequests(this, profile);
             }
 
             if (Requests != null && Requests.Count > 0)
@@ -145,7 +158,7 @@ namespace CargoSorter
                         if (assemberBlock.CustomData.Contains("[Inventory]"))
                         {
                             Requests = new Dictionary<MyDefinitionId, RequestData>();
-                            ParseCustomDataRequests(this, Requests);
+                            ParseCustomDataRequests(this, null);
                         }
                     }
                 }
@@ -201,7 +214,7 @@ namespace CargoSorter
             return sumVolume <= maxVolume;
         }
 
-        private void ParseCustomDataRequests(InventoryInfo inventoryInfo, Dictionary<MyDefinitionId, RequestData> specialRequests)
+        private void ParseCustomDataRequests(InventoryInfo inventoryInfo, string profile)
         {
             var terminalBlock = inventoryInfo.Block as IMyTerminalBlock;
             if (!Util.IsValid(terminalBlock))
@@ -209,13 +222,16 @@ namespace CargoSorter
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} isn't a terminal block");
                 return;
             }
-            var ini = new MyIni();
-            if (!ini.TryParse(terminalBlock.CustomData))
+            iniParser.Clear();
+
+            var sectionName = string.IsNullOrEmpty(profile) ? "Inventory" : $"Inventory:{profile}";
+
+            if (!iniParser.TryParse(terminalBlock.CustomData))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
                 if (string.IsNullOrWhiteSpace(terminalBlock.CustomData))
                 {
-                    terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, ini);
+                    terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, sectionName, iniParser);
                 }
                 else
                 {
@@ -223,13 +239,19 @@ namespace CargoSorter
                     return;
                 }
             }
-            if (!ini.ContainsSection("Inventory"))
+
+            if (!iniParser.ContainsSection(sectionName))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} has no Inventory config section");
-                terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, ini);
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} has no {sectionName} config section");
+                terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, sectionName, iniParser);
             }
             List<MyIniKey> iniKeys = new List<MyIniKey>();
-            ini.GetKeys("Inventory", iniKeys);
+            iniParser.GetKeys(sectionName, iniKeys);
+
+            if (inventoryInfo.Requests == null)
+            {
+                inventoryInfo.Requests = new Dictionary<MyDefinitionId, RequestData>();
+            }
 
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} has {iniKeys.Count}");
             foreach (var iniKey in iniKeys)
@@ -245,23 +267,23 @@ namespace CargoSorter
                     continue;
                 }
 
-                var value = ini.Get(iniKey);
+                var value = iniParser.Get(iniKey);
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
                 if (string.IsNullOrWhiteSpace(valueString))
                 {
-                    specialRequests[definitionId] = new RequestData(0, RequestFlags.None);
+                    inventoryInfo.Requests[definitionId] = new RequestData(0, RequestFlags.None);
                 }
                 else
                 {
                     if (valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
                     {
-                        specialRequests[definitionId] = new RequestData(ComputeAmountThatCouldFit(definitionId), RequestFlags.All);
+                        inventoryInfo.Requests[definitionId] = new RequestData(ComputeAmountThatCouldFit(definitionId), RequestFlags.All);
                         continue;
                     }
 
                     int itemCount;
-                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M', 'r', 'R'), out itemCount) || itemCount < 0)
                     {
                         inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidCount;
                         continue;
@@ -278,12 +300,18 @@ namespace CargoSorter
                     {
                         requestValue.Flag = RequestFlags.Minimum;
                     }
-                    specialRequests[definitionId] = requestValue;
+                    else if (lastChar == 'R' || lastChar == 'r')
+                    {
+                        requestValue.Flag = RequestFlags.Reserved;
+                    }
+                    inventoryInfo.Requests[definitionId] = requestValue;
                 }
             }
+
+            iniParser.Clear();
         }
 
-        private string BuildCurrentContentsSpecialData(IMyCubeBlock block, MyIni ini)
+        private string BuildCurrentContentsSpecialData(IMyCubeBlock block, string sectionName, MyIni ini)
         {
             var items = new Dictionary<MyDefinitionId, MyFixedPoint>();
             for (int i = 0; i < block.InventoryCount; i++)
@@ -304,7 +332,7 @@ namespace CargoSorter
                 return string.Empty;
             }
 
-            return BuildCustomData(items, false, ini);
+            return BuildCustomData(items, false, sectionName, ini);
         }
 
         internal bool CanItemsFit(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
@@ -355,20 +383,24 @@ namespace CargoSorter
             return myFixedPoint;
         }
 
-        internal static string BuildCustomData(Dictionary<MyDefinitionId, MyFixedPoint> items, bool ceiling, MyIni ini = null)
+        internal static string BuildCustomData(Dictionary<MyDefinitionId, MyFixedPoint> items, bool ceiling, string sectionName = null, MyIni ini = null)
         {
             if (ini == null)
             {
                 ini = new MyIni();
             }
-            ini.AddSection("Inventory");
+            if (string.IsNullOrEmpty(sectionName))
+            {
+                sectionName = "Inventory";
+            }
+            ini.AddSection(sectionName);
             foreach (var item in items
                 .Select(i => new KeyValuePair<string, int>(
                     CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(i.Key),
                     (ceiling ? MyFixedPoint.Ceiling(i.Value) : i.Value).ToIntSafe()))
                 .OrderBy(i => i.Key))
             {
-                ini.Set("Inventory", item.Key, item.Value);
+                ini.Set(sectionName, item.Key, item.Value);
             }
             return ini.ToString();
         }

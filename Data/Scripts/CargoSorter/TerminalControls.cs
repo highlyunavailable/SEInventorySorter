@@ -195,14 +195,14 @@ namespace CargoSorter
         {
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
             {
-                CargoSorterSessionComponent.Instance.BeginSortJob(block.CubeGrid, ResultsDisplayType.Chat);
+                CargoSorterSessionComponent.Instance.BeginSortJob(block.CubeGrid, null, ResultsDisplayType.Chat);
             }
         }
         private static void StartSortButtonAction(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
             {
-                CargoSorterSessionComponent.Instance.BeginSortJob(block.CubeGrid, ResultsDisplayType.Window);
+                CargoSorterSessionComponent.Instance.BeginSortJob(block.CubeGrid, null, ResultsDisplayType.Window);
             }
         }
 

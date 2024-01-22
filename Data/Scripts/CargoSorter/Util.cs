@@ -39,6 +39,9 @@ namespace CargoSorter
         //
         // Summary:
         //     Removes whitespace from the end. Copied because the real one is prohibited
-        public static bool InsensitiveContains(this string inString, string value) => inString.IndexOf(value, StringComparison.InvariantCultureIgnoreCase) >= 0;
+        public static bool InsensitiveContains(this string inString, string value)
+        {
+            return inString.IndexOf(value, StringComparison.InvariantCultureIgnoreCase) >= 0;
+        }
     }
 }

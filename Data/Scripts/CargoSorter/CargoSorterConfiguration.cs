@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.ModAPI;
@@ -19,6 +20,7 @@ namespace CargoSorter
         public const string defaultToolContainerKeyword = "Tools";
         public const string defaultAmmoContainerKeyword = "Ammo";
         public const string defaultBottleContainerKeyword = "Bottles";
+        public const string defaultAnyContainerKeyword = "Any Item";
         public static readonly string[] defaultLockedContainerKeywords = { "Locked", "Hidden", "!manual" };
 
         public string SpecialContainerKeyword { get; set; }
@@ -29,6 +31,7 @@ namespace CargoSorter
         public string ToolContainerKeyword { get; set; }
         public string AmmoContainerKeyword { get; set; }
         public string BottleContainerKeyword { get; set; }
+        public string AnyContainerKeyword { get; set; }
         public List<string> LockedContainerKeywords { get; set; }
         public float GasGeneratorFillPercent { get; set; }
         public int ExpectedLargeGridReactorFuel { get; set; }
@@ -51,7 +54,17 @@ namespace CargoSorter
                         loadedSettings = MyAPIGateway.Utilities.SerializeFromXML<CargoSorterConfiguration>(reader.ReadToEnd());
                     }
 
-                    if (loadedSettings == null || !loadedSettings.Validate())
+                    if (loadedSettings == null)
+                    {
+                        throw new Exception("CargoSort: Invalid mod configuration, resetting settings");
+                    }
+
+                    if (!loadedSettings.Validate())
+                    {
+                        loadedSettings.Upgrade();
+                    }
+
+                    if (!loadedSettings.Validate())
                     {
                         throw new Exception("CargoSort: Invalid mod configuration, resetting settings");
                     }
@@ -107,10 +120,23 @@ namespace CargoSorter
                 !string.IsNullOrWhiteSpace(AmmoContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(ToolContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(BottleContainerKeyword) &&
+                !string.IsNullOrWhiteSpace(AnyContainerKeyword) &&
                 LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
                 GasGeneratorFillPercent >= 0f && GasGeneratorFillPercent <= 1f &&
                 ExpectedLargeGridReactorFuel >= 0 &&
                 ExpectedSmallGridReactorFuel >= 0;
+        }
+        private void Upgrade()
+        {
+            SpecialContainerKeyword = CurrentOrDefault(SpecialContainerKeyword, defaultSpecialContainerKeyword);
+            LimitedContainerKeyword = CurrentOrDefault(LimitedContainerKeyword, defaultLimitedContainerKeyword);
+            OreContainerKeyword = CurrentOrDefault(OreContainerKeyword, defaultOreContainerKeyword);
+            IngotContainerKeyword = CurrentOrDefault(IngotContainerKeyword, defaultIngotContainerKeyword);
+            AmmoContainerKeyword = CurrentOrDefault(defaultAmmoContainerKeyword, AmmoContainerKeyword);
+            ComponentContainerKeyword = CurrentOrDefault(ComponentContainerKeyword, defaultComponentContainerKeyword);
+            ToolContainerKeyword = CurrentOrDefault(ToolContainerKeyword, defaultToolContainerKeyword);
+            BottleContainerKeyword = CurrentOrDefault(BottleContainerKeyword, defaultBottleContainerKeyword);
+            AnyContainerKeyword = CurrentOrDefault(AnyContainerKeyword, defaultAnyContainerKeyword);
         }
 
         private void SetDefaults()
@@ -123,6 +149,7 @@ namespace CargoSorter
             ComponentContainerKeyword = defaultComponentContainerKeyword;
             ToolContainerKeyword = defaultToolContainerKeyword;
             BottleContainerKeyword = defaultBottleContainerKeyword;
+            AnyContainerKeyword = defaultAnyContainerKeyword;
             LockedContainerKeywords = new List<string>(defaultLockedContainerKeywords);
             GasGeneratorFillPercent = 0.8f;
             ExpectedLargeGridReactorFuel = 100;
@@ -131,6 +158,15 @@ namespace CargoSorter
             ShowProgressNotifications = true;
             ShowMissingItems = true;
             SkipVerifyConveyorConnection = false;
+        }
+
+        private string CurrentOrDefault(string str, string defaultStr)
+        {
+            if (string.IsNullOrWhiteSpace(str))
+            {
+                return defaultStr;
+            }
+            return str;
         }
     }
 }

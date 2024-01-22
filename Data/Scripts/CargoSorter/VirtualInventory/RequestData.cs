@@ -8,6 +8,7 @@ namespace CargoSorter
         All = 1,
         Minimum = 2,
         Limit = 3,
+        Reserved = 4,
     }
     public struct RequestData
     {
