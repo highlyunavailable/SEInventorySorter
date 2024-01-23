@@ -283,7 +283,7 @@ namespace CargoSorter
                     }
 
                     int itemCount;
-                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M', 'r', 'R'), out itemCount) || itemCount < 0)
+                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                     {
                         inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidCount;
                         continue;
@@ -299,10 +299,6 @@ namespace CargoSorter
                     else if (lastChar == 'M' || lastChar == 'm')
                     {
                         requestValue.Flag = RequestFlags.Minimum;
-                    }
-                    else if (lastChar == 'R' || lastChar == 'r')
-                    {
-                        requestValue.Flag = RequestFlags.Reserved;
                     }
                     inventoryInfo.Requests[definitionId] = requestValue;
                 }

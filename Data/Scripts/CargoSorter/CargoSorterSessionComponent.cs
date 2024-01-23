@@ -661,23 +661,23 @@ namespace CargoSorter
         }
         private void BuildDesiredItemMovement(CargoSorterWorkData workData)
         {
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
             List<MyDefinitionId> inventoryKeys = new List<MyDefinitionId>();
             for (int sourceInvIndex = workData.Inventories.Count - 1; sourceInvIndex >= 0; sourceInvIndex--)
             {
                 var sourceInventory = workData.Inventories[sourceInvIndex];
                 var sourcePBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)sourceInventory.RealInventory;
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
                 if (sourceInventory.VirtualInventory.Count == 0) // Nothing to transfer out
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping due to no items");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping due to no items");
                     continue;
                 }
 
                 // Don't steal items from draining conveyor sorters, they'll just take them back.
                 if (sourceInventory.TypeRequests.HasFlag(TypeRequests.SorterItems) && (sourceInventory.Block as IMyConveyorSorter)?.DrainAll == true)
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
                     continue;
                 }
 
@@ -701,7 +701,7 @@ namespace CargoSorter
 
                     if (sourceSpecial && (!Config.AllowSpecialSteal || !destSpecial))
                     {
-                        MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
                         continue;
                     }
 
@@ -713,7 +713,7 @@ namespace CargoSorter
                     }
 
                     var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
 
                     for (int invKeyIndex = inventoryKeys.Count - 1; invKeyIndex >= 0; invKeyIndex--)
                     {
@@ -725,30 +725,21 @@ namespace CargoSorter
                             continue;
                         }
 
-                        RequestData requestData;
-                        MyFixedPoint amountToBeMoved;
-                        if (destInventory.Requests != null && destInventory.Requests.TryGetValue(virtualItemKey, out requestData) && requestData.Flag == RequestFlags.Reserved && (sourceInventory.Requests == null || !sourceInventory.Requests.ContainsKey(virtualItemKey)))
-                        {
-                            MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired ComputeAmountThatFits");
-                            amountToBeMoved = MyFixedPoint.Min(destInventory.ComputeAmountThatFits(virtualItemKey, true), virtualItemValue);
-                        }
-                        else
-                        {
-                            MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
-                            amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
-                        }
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
+                        MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
+
                         if (amountToBeMoved <= MyFixedPoint.Zero || (!Config.SkipVerifyConveyorConnection && !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey)))
                         {
                             continue;
                         }
 
-                        MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
 
                         MyFixedPoint volumeToBeMoved;
                         MyFixedPoint massToBeMoved;
                         if (!destInventory.CanItemsFit(amountToBeMoved, virtualItemKey, out volumeToBeMoved, out massToBeMoved))
                         {
-                            MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {virtualItemKey} with amount {amountToBeMoved} to inventory");
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {virtualItemKey} with amount {amountToBeMoved} to inventory");
                             continue;
                         }
                         AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, virtualItemKey, amountToBeMoved, volumeToBeMoved, massToBeMoved));
@@ -958,13 +949,9 @@ namespace CargoSorter
 
                 if ((requestInfo.Flag <= RequestFlags.All) ||
                     (requestInfo.Flag == RequestFlags.Limit && virtualAmount > requestInfo.Amount) ||
-                    ((requestInfo.Flag == RequestFlags.Minimum || requestInfo.Flag == RequestFlags.Reserved) && virtualAmount < requestInfo.Amount))
+                    (requestInfo.Flag == RequestFlags.Minimum && virtualAmount < requestInfo.Amount))
                 {
                     return MyFixedPoint.Min(inventoryInfo.ComputeAmountThatFits(definitionId, true), requestInfo.Amount - virtualAmount);
-                }
-                if (requestInfo.Flag == RequestFlags.Reserved && virtualAmount > requestInfo.Amount)
-                {
-                    return requestInfo.Amount - virtualAmount;
                 }
                 return MyFixedPoint.Zero;
             }
@@ -1086,7 +1073,7 @@ namespace CargoSorter
                                 }
 
                                 int itemCount;
-                                if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M', 'r', 'R'), out itemCount) || itemCount < 0)
+                                if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                 {
                                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
                                     continue;
@@ -1285,7 +1272,7 @@ namespace CargoSorter
                         continue;
                     }
                     var toTransfer = MyFixedPoint.Min(item.Amount, needToMove);
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
                     transferRequests++;
                     needToMove -= toTransfer;
