@@ -260,6 +260,16 @@ namespace CargoSorter
                 {
                     continue;
                 }
+                // Allow forcing a new priority with a special key
+                if (iniKey.Name.Equals("Priority", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var newPriority = iniParser.Get(iniKey).ToByte(byte.MaxValue);
+                    if (newPriority <= byte.MaxValue)
+                    {
+                        inventoryInfo.Priority = newPriority;
+                        continue;
+                    }
+                }
                 MyDefinitionId definitionId;
                 if (!CargoSorterSessionComponent.Instance.TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                 {
