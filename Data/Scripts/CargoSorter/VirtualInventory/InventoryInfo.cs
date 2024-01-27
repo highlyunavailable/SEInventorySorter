@@ -229,7 +229,7 @@ namespace CargoSorter
             if (!iniParser.TryParse(terminalBlock.CustomData))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
-                if (string.IsNullOrWhiteSpace(terminalBlock.CustomData))
+                if (IsCustomDataEmpty(terminalBlock.CustomData))
                 {
                     terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, sectionName, iniParser);
                 }
@@ -261,7 +261,7 @@ namespace CargoSorter
                     continue;
                 }
                 // Allow forcing a new priority with a special key
-                if (iniKey.Name.Equals("Priority", StringComparison.InvariantCultureIgnoreCase))
+                if (iniKey.Name.Equals("Priority", StringComparison.OrdinalIgnoreCase))
                 {
                     var newPriority = iniParser.Get(iniKey).ToByte(byte.MaxValue);
                     if (newPriority <= byte.MaxValue)
@@ -315,6 +315,11 @@ namespace CargoSorter
             }
 
             iniParser.Clear();
+        }
+
+        private bool IsCustomDataEmpty(string customData)
+        {
+            return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase);
         }
 
         private string BuildCurrentContentsSpecialData(IMyCubeBlock block, string sectionName, MyIni ini)

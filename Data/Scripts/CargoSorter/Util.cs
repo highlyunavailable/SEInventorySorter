@@ -41,7 +41,7 @@ namespace CargoSorter
         //     Removes whitespace from the end. Copied because the real one is prohibited
         public static bool InsensitiveContains(this string inString, string value)
         {
-            return inString.IndexOf(value, StringComparison.InvariantCultureIgnoreCase) >= 0;
+            return inString.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }

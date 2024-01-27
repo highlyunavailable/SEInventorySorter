@@ -40,7 +40,7 @@ namespace CargoSorter
         private readonly Dictionary<string, MyDefinitionId> wcAmmoMagazines = new Dictionary<string, MyDefinitionId>();
         private static readonly MyDefinitionId IgnoredEnergyAmmoDefinitionId = new MyDefinitionId(typeof(MyObjectBuilder_AmmoMagazine), "Energy");
 
-        private readonly Dictionary<string, MyDefinitionId> stringPhysicalItemMap = new Dictionary<string, MyDefinitionId>(StringComparer.InvariantCultureIgnoreCase);
+        private readonly Dictionary<string, MyDefinitionId> stringPhysicalItemMap = new Dictionary<string, MyDefinitionId>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<MyObjectBuilderType, string> friendlyTypeNames = new Dictionary<MyObjectBuilderType, string>();
 
         private Task jobTask;
@@ -161,7 +161,7 @@ namespace CargoSorter
         private void MakeNormalizedId(MyDefinitionId definitionId, string friendlyType)
         {
             var friendlyTypeLower = friendlyType.ToLowerInvariant();
-            var normalizedStringId = definitionId.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, string.Empty, StringComparison.InvariantCultureIgnoreCase).ToLowerInvariant();
+            var normalizedStringId = definitionId.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, string.Empty, StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
             stringPhysicalItemMap[normalizedStringId] = definitionId;
             if (normalizedStringId != friendlyTypeLower)
             {
@@ -339,6 +339,11 @@ namespace CargoSorter
             }
             var inventoryInfo = new InventoryInfo(inputInventory, null);
 
+            if (inventoryInfo.Requests == null)
+            {
+                return false;
+            }
+
             foreach (var request in inventoryInfo.Requests)
             {
                 MyBlueprintDefinitionBase blueprintDefinition;
@@ -471,7 +476,7 @@ namespace CargoSorter
                     {
                         workData.AvailableForDistribution[item.Key] = workData.AvailableForDistribution.GetValueOrDefault(item.Key) + item.Value;
                     }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special) || inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
+                    if ((inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special) || inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited)) && inventoryInfo.Requests != null)
                     {
                         foreach (var request in inventoryInfo.Requests)
                         {
@@ -924,7 +929,7 @@ namespace CargoSorter
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
                     return GetRequestAmount(inventoryInfo, definitionId, currentValue);
                 default:
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests.ContainsKey(definitionId))
+                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests != null && inventoryInfo.Requests.ContainsKey(definitionId))
                     {
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
                         return GetRequestAmount(inventoryInfo, definitionId, currentValue);
@@ -942,6 +947,10 @@ namespace CargoSorter
         private static MyFixedPoint GetRequestAmount(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue)
         {
             RequestData requestInfo;
+            if (inventoryInfo.Requests == null)
+            {
+                return -currentValue;
+            }
             if (inventoryInfo.Requests.TryGetValue(definitionId, out requestInfo))
             {
                 MyFixedPoint virtualAmount;
@@ -1067,7 +1076,7 @@ namespace CargoSorter
 
                                 var value = ini.Get(iniKey);
                                 var valueString = value.ToString();
-                                if (string.IsNullOrWhiteSpace(valueString) || valueString.Equals("All", StringComparison.InvariantCultureIgnoreCase))
+                                if (string.IsNullOrWhiteSpace(valueString) || valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
                                 {
                                     continue;
                                 }
@@ -1145,7 +1154,7 @@ namespace CargoSorter
 
                                     var value = ini.Get(iniKey);
                                     var valueString = value.ToString();
-                                    if (string.IsNullOrWhiteSpace(valueString) || valueString.Equals("All", StringComparison.InvariantCultureIgnoreCase))
+                                    if (string.IsNullOrWhiteSpace(valueString) || valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
                                     {
                                         continue;
                                     }
@@ -1405,7 +1414,7 @@ namespace CargoSorter
 
             foreach (var dummy in dummies)
             {
-                if (dummy.Value.Name.StartsWith("detector_conveyor", StringComparison.InvariantCultureIgnoreCase))
+                if (dummy.Value.Name.StartsWith("detector_conveyor", StringComparison.OrdinalIgnoreCase))
                 {
                     supportsConveyors = true;
                     break;
