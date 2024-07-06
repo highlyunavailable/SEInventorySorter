@@ -114,7 +114,6 @@ namespace CargoSorter
         }
 
         private static bool IsControlVisible(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyShipController;
-
         private static bool HasQueueReady(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyAssembler)?.IsQueueEmpty == false;
         private static bool CanMakeQueueFromCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
             !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.SpecialContainerKeyword) &&
@@ -175,11 +174,11 @@ namespace CargoSorter
                 GenerateQueueFromCustomDataButton.Action = QueueFromCustomDataAction;
             }
             {
-                GenerateQueueFromCustomDataButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
-                GenerateQueueFromCustomDataButton.Title = MyStringId.GetOrCompute("Clear Queue");
-                GenerateQueueFromCustomDataButton.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
-                GenerateQueueFromCustomDataButton.SupportsMultipleBlocks = true;
-                GenerateQueueFromCustomDataButton.Action = ClearAssemblerQueueAction;
+                ClearAssemblerQueueButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
+                ClearAssemblerQueueButton.Title = MyStringId.GetOrCompute("Clear Queue");
+                ClearAssemblerQueueButton.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
+                ClearAssemblerQueueButton.SupportsMultipleBlocks = true;
+                ClearAssemblerQueueButton.Action = ClearAssemblerQueueAction;
             }
             {
                 GenerateCustomDataFromProjectionButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("CargoSort_GenerateCustomDataFromProjectionButton");
