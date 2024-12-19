@@ -12,94 +12,6 @@ namespace CargoSorter
     {
         private static bool Done = false;
 
-        private static IMyTerminalControlButton SortInventoryButton;
-        private static IMyTerminalAction SortInventoryAction;
-        private static IMyTerminalControlButton GeneratePrerequisiteCustomDataFromQueueButton;
-        private static IMyTerminalControlButton GenerateResultCustomDataFromQueueButton;
-        private static IMyTerminalControlButton GenerateQueueFromCustomDataButton;
-        private static IMyTerminalControlButton ClearAssemblerQueueButton;
-        private static IMyTerminalControlButton GenerateCustomDataFromProjectionButton;
-
-        public static IMyTerminalControlButton SortButton
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return SortInventoryButton;
-            }
-        }
-        public static IMyTerminalAction SortAction
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return SortInventoryAction;
-            }
-        }
-        public static IMyTerminalControlButton GeneratePrerequisiteCustomDataFromQueue
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return GeneratePrerequisiteCustomDataFromQueueButton;
-            }
-        }
-        public static IMyTerminalControlButton GenerateResultCustomDataFromQueue
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return GenerateResultCustomDataFromQueueButton;
-            }
-        }
-
-        public static IMyTerminalControlButton GenerateQueueFromCustomData
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return GenerateQueueFromCustomDataButton;
-            }
-        }
-        public static IMyTerminalControlButton ClearAssemblerQueue
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return ClearAssemblerQueueButton;
-            }
-        }
-
-        public static IMyTerminalControlButton GenerateCustomDataFromProjection
-        {
-            get
-            {
-                if (!Done)
-                {
-                    DoOnce();
-                }
-                return GenerateCustomDataFromProjectionButton;
-            }
-        }
-
         public static void DoOnce()
         {
             if (Done)
@@ -120,73 +32,124 @@ namespace CargoSorter
             !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.LimitedContainerKeyword) &&
             block.CustomData.Contains("[Inventory]");
         private static bool HasProjectedGrid(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyProjector)?.ProjectedGrid != null;
+        private static bool HasQuotaCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
+            block.CustomData.Contains("[Quota]") && !block.DisplayNameText.InsensitiveContains("[Secondary:");
 
         private static void CreateActions()
         {
             {
-                SortInventoryAction = MyAPIGateway.TerminalControls.CreateAction<IMyShipController>("CargoSort_Sort");
-                SortInventoryAction.Enabled = IsControlVisible;
-                SortInventoryAction.Name = new StringBuilder("Sort Inventory");
-                SortInventoryAction.Icon = @"Textures\GUI\Icons\Actions\Reverse.dds";
-                SortInventoryAction.ValidForGroups = false;
-                SortInventoryAction.InvalidToolbarTypes = new List<MyToolbarType>()
+                var action = MyAPIGateway.TerminalControls.CreateAction<IMyShipController>("CargoSort_Sort");
+                action.Enabled = IsControlVisible;
+                action.Name = new StringBuilder("Sort Inventory");
+                action.Icon = @"Textures\GUI\Icons\Actions\Reverse.dds";
+                action.ValidForGroups = false;
+                action.InvalidToolbarTypes = new List<MyToolbarType>()
                 {
                     MyToolbarType.Character,
                     MyToolbarType.ButtonPanel,
                     MyToolbarType.Seat,
                 };
-                SortInventoryAction.Action = StartSortToolbarAction;
+                action.Action = StartSortToolbarAction;
+                MyAPIGateway.TerminalControls.AddAction<IMyCockpit>(action);
+                MyAPIGateway.TerminalControls.AddAction<IMyCryoChamber>(action);
+                MyAPIGateway.TerminalControls.AddAction<IMyRemoteControl>(action);
+            }
+            {
+                var action = MyAPIGateway.TerminalControls.CreateAction<IMyAssembler>("CargoSort_Quota");
+                action.Enabled = HasQuotaCustomData;
+                action.Name = new StringBuilder("Quota Production");
+                action.Icon = @"Textures\GUI\Icons\Actions\Start.dds";
+                action.ValidForGroups = false;
+                action.InvalidToolbarTypes = new List<MyToolbarType>()
+                {
+                    MyToolbarType.Character,
+                    MyToolbarType.ButtonPanel,
+                    MyToolbarType.Seat,
+                };
+                action.Action = controlAction;
+                MyAPIGateway.TerminalControls.AddAction<IMyAssembler>(action);
+            }
+            {
+                var action = MyAPIGateway.TerminalControls.CreateAction<IMyAssembler>("CargoSort_ClearQueueAction");
+                action.Name = new StringBuilder("Clear Queue");
+                action.Icon = @"Textures\GUI\Icons\Actions\Reset.dds";
+                action.InvalidToolbarTypes = new List<MyToolbarType>()
+                {
+                    MyToolbarType.Character,
+                    MyToolbarType.ButtonPanel,
+                    MyToolbarType.Seat,
+                };
+                action.Action = ClearAssemblerQueueItems;
+                MyAPIGateway.TerminalControls.AddAction<IMyAssembler>(action);
             }
         }
 
         private static void CreateControls()
         {
             {
-                SortInventoryButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyShipController>("CargoSort_SortButton");
-                SortInventoryButton.Title = MyStringId.GetOrCompute("Sort Inventory");
-                SortInventoryButton.Tooltip = MyStringId.GetOrCompute("Sorts the inventory of the current grid and all attached grids");
-                SortInventoryButton.SupportsMultipleBlocks = false;
-                SortInventoryButton.Visible = IsControlVisible;
-                SortInventoryButton.Action = StartSortButtonAction;
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyShipController>("CargoSort_SortButton");
+                control.Title = MyStringId.GetOrCompute("Sort Inventory");
+                control.Tooltip = MyStringId.GetOrCompute("Sorts the inventory of the current grid and all attached grids");
+                control.SupportsMultipleBlocks = false;
+                control.Visible = IsControlVisible;
+                control.Action = StartSortButtonAction;
+                MyAPIGateway.TerminalControls.AddControl<IMyCockpit>(control);
+                MyAPIGateway.TerminalControls.AddControl<IMyCryoChamber>(control);
+                MyAPIGateway.TerminalControls.AddControl<IMyRemoteControl>(control);
             }
             {
-                GeneratePrerequisiteCustomDataFromQueueButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GeneratePrerequisiteCustomDataFromQueueButton");
-                GeneratePrerequisiteCustomDataFromQueueButton.Title = MyStringId.GetOrCompute("Make Prerequisite Data");
-                GeneratePrerequisiteCustomDataFromQueueButton.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data that can be pasted into a Special/Limited container to fill it with the prerequisites for this assembler's queue");
-                GeneratePrerequisiteCustomDataFromQueueButton.SupportsMultipleBlocks = false;
-                GeneratePrerequisiteCustomDataFromQueueButton.Enabled = HasQueueReady;
-                GeneratePrerequisiteCustomDataFromQueueButton.Action = GeneratePrerequisiteCustomDataFromQueueAction;
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GeneratePrerequisiteCustomDataFromQueueButton");
+                control.Title = MyStringId.GetOrCompute("Make Prerequisite Data");
+                control.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data that can be pasted into a Special/Limited container to fill it with the prerequisites for this assembler's queue");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasQueueReady;
+                control.Action = GeneratePrerequisiteCustomDataFromQueueAction;
+                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
             }
             {
-                GenerateResultCustomDataFromQueueButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GenerateCustomDataFromQueueButton");
-                GenerateResultCustomDataFromQueueButton.Title = MyStringId.GetOrCompute("Make Result Data");
-                GenerateResultCustomDataFromQueueButton.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data that can be pasted into a Special/Limited container to fill it with the results of this assembler's queue");
-                GenerateResultCustomDataFromQueueButton.SupportsMultipleBlocks = false;
-                GenerateResultCustomDataFromQueueButton.Enabled = HasQueueReady;
-                GenerateResultCustomDataFromQueueButton.Action = GenerateResultCustomDataFromQueueAction;
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GenerateCustomDataFromQueueButton");
+                control.Title = MyStringId.GetOrCompute("Make Result Data");
+                control.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data that can be pasted into a Special/Limited container to fill it with the results of this assembler's queue");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasQueueReady;
+                control.Action = GenerateResultCustomDataFromQueueAction;
+                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
+            }
+
+            {
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GenerateQueueFromCustomDataButton");
+                control.Title = MyStringId.GetOrCompute("Make Queue from Data");
+                control.Tooltip = MyStringId.GetOrCompute("Queues up items from the Inventory custom data of this assembler");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = CanMakeQueueFromCustomData;
+                control.Action = QueueFromCustomDataAction;
+                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
             }
             {
-                GenerateQueueFromCustomDataButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GenerateQueueFromCustomDataButton");
-                GenerateQueueFromCustomDataButton.Title = MyStringId.GetOrCompute("Make Queue from Data");
-                GenerateQueueFromCustomDataButton.Tooltip = MyStringId.GetOrCompute("Queues up items from the Inventory custom data of this assembler");
-                GenerateQueueFromCustomDataButton.SupportsMultipleBlocks = false;
-                GenerateQueueFromCustomDataButton.Enabled = CanMakeQueueFromCustomData;
-                GenerateQueueFromCustomDataButton.Action = QueueFromCustomDataAction;
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
+                control.Title = MyStringId.GetOrCompute("Clear Queue");
+                control.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
+                control.SupportsMultipleBlocks = true;
+                control.Action = ClearAssemblerQueueItems;
+                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
             }
             {
-                ClearAssemblerQueueButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
-                ClearAssemblerQueueButton.Title = MyStringId.GetOrCompute("Clear Queue");
-                ClearAssemblerQueueButton.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
-                ClearAssemblerQueueButton.SupportsMultipleBlocks = true;
-                ClearAssemblerQueueButton.Action = ClearAssemblerQueueAction;
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_BuildToQuotaButton");
+                control.Title = MyStringId.GetOrCompute("Build to Quota");
+                control.Tooltip = MyStringId.GetOrCompute("Queue up items to match production quotas. Must be a primary group assembler and have quota data.");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasQuotaCustomData;
+                control.Action = controlAction;
+                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
             }
             {
-                GenerateCustomDataFromProjectionButton = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("CargoSort_GenerateCustomDataFromProjectionButton");
-                GenerateCustomDataFromProjectionButton.Title = MyStringId.GetOrCompute("Make Data from Projection");
-                GenerateCustomDataFromProjectionButton.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data from the projected grid. Paste this into an assembler to queue it!");
-                GenerateCustomDataFromProjectionButton.SupportsMultipleBlocks = false;
-                GenerateCustomDataFromProjectionButton.Enabled = HasProjectedGrid;
-                GenerateCustomDataFromProjectionButton.Action = GenerateCustomDataFromProjectionAction;
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("CargoSort_GenerateCustomDataFromProjectionButton");
+                control.Title = MyStringId.GetOrCompute("Make Data from Projection");
+                control.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data from the projected grid. Paste this into an assembler to queue it!");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasProjectedGrid;
+                control.Action = GenerateCustomDataFromProjectionAction;
+                MyAPIGateway.TerminalControls.AddControl<IMyProjector>(control);
             }
         }
 
@@ -244,7 +207,7 @@ namespace CargoSorter
                 MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", null, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
             }
         }
-        private static void ClearAssemblerQueueAction(IMyTerminalBlock block)
+        private static void ClearAssemblerQueueItems(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && block is IMyAssembler)
             {
@@ -275,5 +238,14 @@ namespace CargoSorter
                 }, !string.IsNullOrWhiteSpace(data) ? "Copy to Clipboard" : null);
             }
         }
+
+        private static void controlAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null && block is IMyAssembler)
+            {
+                CargoSorterSessionComponent.Instance.BeginQuotaJob(block as IMyAssembler, ResultsDisplayType.Window);
+            }
+        }
+
     }
 }

@@ -21,6 +21,7 @@ namespace CargoSorter
         public const string defaultAmmoContainerKeyword = "Ammo";
         public const string defaultBottleContainerKeyword = "Bottles";
         public const string defaultAnyContainerKeyword = "Any Item";
+        public const string defaultQuotaContainerKeyword = "Cargo";
         public static readonly string[] defaultLockedContainerKeywords = { "Locked", "Hidden", "!manual" };
 
         public string SpecialContainerKeyword { get; set; }
@@ -32,6 +33,7 @@ namespace CargoSorter
         public string AmmoContainerKeyword { get; set; }
         public string BottleContainerKeyword { get; set; }
         public string AnyContainerKeyword { get; set; }
+        public string QuotaContainerKeyword { get; set; }
         public List<string> LockedContainerKeywords { get; set; }
         public float GasGeneratorFillPercent { get; set; }
         public int ExpectedLargeGridReactorFuel { get; set; }
@@ -121,6 +123,7 @@ namespace CargoSorter
                 !string.IsNullOrWhiteSpace(ToolContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(BottleContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(AnyContainerKeyword) &&
+                !string.IsNullOrWhiteSpace(QuotaContainerKeyword) &&
                 LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
                 GasGeneratorFillPercent >= 0f && GasGeneratorFillPercent <= 1f &&
                 ExpectedLargeGridReactorFuel >= 0 &&
@@ -137,6 +140,7 @@ namespace CargoSorter
             ToolContainerKeyword = CurrentOrDefault(ToolContainerKeyword, defaultToolContainerKeyword);
             BottleContainerKeyword = CurrentOrDefault(BottleContainerKeyword, defaultBottleContainerKeyword);
             AnyContainerKeyword = CurrentOrDefault(AnyContainerKeyword, defaultAnyContainerKeyword);
+            QuotaContainerKeyword = CurrentOrDefault(QuotaContainerKeyword, defaultQuotaContainerKeyword);
         }
 
         private void SetDefaults()
@@ -150,6 +154,7 @@ namespace CargoSorter
             ToolContainerKeyword = defaultToolContainerKeyword;
             BottleContainerKeyword = defaultBottleContainerKeyword;
             AnyContainerKeyword = defaultAnyContainerKeyword;
+            QuotaContainerKeyword = defaultQuotaContainerKeyword;
             LockedContainerKeywords = new List<string>(defaultLockedContainerKeywords);
             GasGeneratorFillPercent = 0.8f;
             ExpectedLargeGridReactorFuel = 100;

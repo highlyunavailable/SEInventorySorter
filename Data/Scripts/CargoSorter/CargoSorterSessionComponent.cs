@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using CoreSystems.Api;
 using ParallelTasks;
@@ -133,8 +135,9 @@ namespace CargoSorter
 
         public override void BeforeStart()
         {
-            MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
-            MyAPIGateway.TerminalControls.CustomActionGetter += CustomActionGetter;
+            //MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
+            //MyAPIGateway.TerminalControls.CustomActionGetter += CustomActionGetter;
+            TerminalControls.DoOnce();
             if (!wcApi.IsReady)
             {
                 wcApi.Load(OnWcReady, true);
@@ -275,6 +278,18 @@ namespace CargoSorter
             jobTask = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
         }
 
+        public void BeginQuotaJob(IMyAssembler assembler, ResultsDisplayType resultsDisplayType)
+        {
+            if (jobTask.valid && !jobTask.IsComplete)
+            {
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "A job is already in progress!");
+                return;
+            }
+
+            var workData = new QuotaManagerWorkData(assembler, new ProductionQuotaInfo(assembler), resultsDisplayType);
+            jobTask = MyAPIGateway.Parallel.Start(SetProductionQuotasAction, SetProductionQuotasCallback, workData);
+        }
+
         public string GeneratePrerequisiteCustomDataFromQueue(IMyAssembler assembler)
         {
             var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
@@ -395,10 +410,7 @@ namespace CargoSorter
             try
             {
                 var workData = (CargoSorterWorkData)data;
-                List<IMyCubeGrid> excludedGrids = new List<IMyCubeGrid>();
-
                 var tree = new GridConnectorTree(workData.RootGrid);
-
                 var nodes = tree.GatherRecursive(c =>
                 {
                     return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
@@ -761,189 +773,204 @@ namespace CargoSorter
             }
             MyFixedPoint virtualAmount;
             var percentFull = (float)inventoryInfo.VirtualVolume / (float)inventoryInfo.MaxVolume;
-            switch (inventoryInfo.TypeRequests)
+
+            var typeRequests = inventoryInfo.TypeRequests;
+
+            if (typeRequests == TypeRequests.Nothing)
             {
-                case TypeRequests.Nothing:
+                return -currentValue;
+            }
+
+            if (typeRequests == TypeRequests.GasGeneratorOre)
+            {
+                if (allBottles.Contains(definitionId))
+                {
                     return -currentValue;
-                case TypeRequests.GasGeneratorOre:
-                    if (allBottles.Contains(definitionId))
-                    {
-                        return -currentValue;
-                    }
-                    virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+                }
+                virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
-                    // <= 0 disables the feature
-                    if (Config.GasGeneratorFillPercent <= 0)
-                    {
-                        return MyFixedPoint.Zero;
-                    }
+                // <= 0 disables the feature
+                if (Config.GasGeneratorFillPercent <= 0)
+                {
+                    return MyFixedPoint.Zero;
+                }
 
-                    return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
-                        ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
-                        (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
-                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
-                        : MyFixedPoint.Zero;
-                case TypeRequests.AssemblerIngots:
-                    var assembler = inventoryInfo.Block as IMyAssembler;
-                    // Make sure the output inventory is clear in normal operation.
-                    if (assembler != null && assembler.IsProducing && assembler.Enabled)
+                return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
+                    ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                    (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
+                    (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
+                    : MyFixedPoint.Zero;
+            }
+            else if (typeRequests == TypeRequests.AssemblerIngots)
+            {
+                var assembler = inventoryInfo.Block as IMyAssembler;
+                // Make sure the output inventory is clear in normal operation.
+                if (assembler != null && assembler.IsProducing && assembler.Enabled)
+                {
+                    MyInventoryConstraint constraintToCheck = null;
+                    switch (assembler.Mode)
                     {
-                        MyInventoryConstraint constraintToCheck = null;
-                        switch (assembler.Mode)
-                        {
-                            case Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly:
-                                if (inventoryInfo.RealInventory != assembler.InputInventory)
-                                {
-                                    // Always clear output side when assembling
-                                    return -currentValue;
-                                }
-                                constraintToCheck = ((MyInventory)assembler.InputInventory)?.Constraint;
-                                break;
-                            case Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly:
-                                if (inventoryInfo.RealInventory != assembler.OutputInventory)
-                                {
-                                    // Always clear input side when disassembling
-                                    return -currentValue;
-                                }
-                                constraintToCheck = ((MyInventory)assembler.OutputInventory)?.Constraint;
-                                break;
-                        }
-
-                        if (constraintToCheck != null && constraintToCheck.ConstrainedIds.Contains(definitionId))
-                        {
-                            var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
-                            MyFixedPoint newAmount = -currentValue;
-                            // Crawl the queue's blueprints to see if what we have is what we need, and get rid of stuff we don't need.
-                            foreach (var queuedItem in assembler.GetQueue())
+                        case Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly:
+                            if (inventoryInfo.RealInventory != assembler.InputInventory)
                             {
-                                var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
-                                if (blueprint == null)
+                                // Always clear output side when assembling
+                                return -currentValue;
+                            }
+                            constraintToCheck = ((MyInventory)assembler.InputInventory)?.Constraint;
+                            break;
+                        case Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly:
+                            if (inventoryInfo.RealInventory != assembler.OutputInventory)
+                            {
+                                // Always clear input side when disassembling
+                                return -currentValue;
+                            }
+                            constraintToCheck = ((MyInventory)assembler.OutputInventory)?.Constraint;
+                            break;
+                    }
+
+                    if (constraintToCheck != null && constraintToCheck.ConstrainedIds.Contains(definitionId))
+                    {
+                        var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
+                        MyFixedPoint newAmount = -currentValue;
+                        // Crawl the queue's blueprints to see if what we have is what we need, and get rid of stuff we don't need.
+                        foreach (var queuedItem in assembler.GetQueue())
+                        {
+                            var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
+                            if (blueprint == null)
+                            {
+                                continue;
+                            }
+
+                            foreach (var prerequisite in blueprint.Prerequisites)
+                            {
+                                if (prerequisite.Id != definitionId)
                                 {
                                     continue;
                                 }
-
-                                foreach (var prerequisite in blueprint.Prerequisites)
-                                {
-                                    if (prerequisite.Id != definitionId)
-                                    {
-                                        continue;
-                                    }
-                                    newAmount += prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
-                                }
+                                newAmount += prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
                             }
+                        }
 
-                            // Let the assembler pull if it can and needs more so that there's no situation
-                            // where one assembler hogs all the material due to queued items.
-                            return assembler.UseConveyorSystem && newAmount > MyFixedPoint.Zero ? MyFixedPoint.Zero : newAmount;
-                        }
+                        // Let the assembler pull if it can and needs more so that there's no situation
+                        // where one assembler hogs all the material due to queued items.
+                        return assembler.UseConveyorSystem && newAmount > MyFixedPoint.Zero ? MyFixedPoint.Zero : newAmount;
                     }
-                    // If the assembler is off or full somehow, just take everything out.
-                    return -currentValue;
-                case TypeRequests.RefineryOre:
-                    var refinery = inventoryInfo.Block as IMyRefinery;
-                    if (refinery != null)
+                }
+                // If the assembler is off or full somehow, just take everything out.
+                return -currentValue;
+            }
+            else if (typeRequests == TypeRequests.RefineryOre)
+            {
+                var refinery = inventoryInfo.Block as IMyRefinery;
+                if (refinery != null)
+                {
+                    var inputConstraint = ((MyInventory)refinery.InputInventory)?.Constraint;
+                    if (inventoryInfo.RealInventory == refinery.InputInventory && inputConstraint != null && inputConstraint.ConstrainedIds.Contains(definitionId))
                     {
-                        var inputConstraint = ((MyInventory)refinery.InputInventory)?.Constraint;
-                        if (inventoryInfo.RealInventory == refinery.InputInventory && inputConstraint != null && inputConstraint.ConstrainedIds.Contains(definitionId))
-                        {
-                            // Only clear the refinery input if the refinery is off
-                            return refinery.IsProducing && refinery.Enabled ? MyFixedPoint.Zero : -currentValue;
-                        }
+                        // Only clear the refinery input if the refinery is off
+                        return refinery.IsProducing && refinery.Enabled ? MyFixedPoint.Zero : -currentValue;
                     }
-                    // If this is the refinery output, or the refinery is off or full somehow, take everything out.
-                    return -currentValue;
-                case TypeRequests.GasTankBottles:
-                    // Remove all bottles from tanks
-                    return -currentValue;
-                case TypeRequests.SorterItems:
-                    var sorter = inventoryInfo.Block as IMyConveyorSorter;
-                    if (sorter != null)
+                }
+                // If this is the refinery output, or the refinery is off or full somehow, take everything out.
+                return -currentValue;
+            }
+            else if (typeRequests == TypeRequests.GasTankBottles)
+            {
+                // Remove all bottles from tanks
+                return -currentValue;
+            }
+            else if (typeRequests.HasFlag(TypeRequests.SorterItems))
+            {
+                var sorter = inventoryInfo.Block as IMyConveyorSorter;
+                if (sorter != null)
+                {
+                    if (sorter.DrainAll)
                     {
-                        if (sorter.DrainAll)
-                        {
-                            return MyFixedPoint.Zero;
-                        }
-                        // If additional flags exist, let them be handled
-                        if (inventoryInfo.TypeRequests != TypeRequests.SorterItems)
-                        {
-                            goto default;
-                        }
+                        return MyFixedPoint.Zero;
                     }
-                    return -currentValue;
-                case TypeRequests.ReactorFuel:
-                    var reactor = inventoryInfo.Block as IMyReactor;
-                    if (reactor == null)
+                    else if (typeRequests == TypeRequests.SorterItems) // If there are no other flags to handle, just empty it
                     {
                         return -currentValue;
                     }
-
-                    MyFixedPoint availableForDistribution;
-                    if (!workData.AvailableForDistribution.TryGetValue(definitionId, out availableForDistribution) || availableForDistribution <= MyFixedPoint.Zero)
-                    {
-                        return MyFixedPoint.Zero;
-                    }
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} availableForDistribution {availableForDistribution}");
-                    var typeKey = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, definitionId);
-                    int typeRequestCount;
-                    if (!workData.RequestTypeCount.TryGetValue(typeKey, out typeRequestCount) || availableForDistribution <= 0)
-                    {
-                        return MyFixedPoint.Zero;
-                    }
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} typeRequestCount {typeRequestCount}");
-
-                    var configuredExpected = reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel;
-
-                    // <= 0 disables the feature
-                    if (configuredExpected <= 0)
-                    {
-                        return MyFixedPoint.Zero;
-                    }
-
-                    var expectedAmount = (MyFixedPoint)Math.Min(
-                         (float)availableForDistribution / (float)typeRequestCount,
-                         ((float)configuredExpected * reactor.PowerOutputMultiplier)
-                        );
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
-                    virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
-
-                    if (virtualAmount < expectedAmount * 0.5f)
-                    {
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning ({expectedAmount} - {virtualAmount}) {expectedAmount - virtualAmount}");
-                        return expectedAmount - virtualAmount;
-                    }
-                    else if (currentValue > expectedAmount)
-                    {
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning ({expectedAmount} - {currentValue}) {expectedAmount - currentValue}");
-                        return expectedAmount - currentValue;
-                    }
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
-                    return MyFixedPoint.Zero;
-                case TypeRequests.ConsumableAmmo:
-                    // If additional flags exist, let them be handled
-                    if (inventoryInfo.TypeRequests != TypeRequests.ConsumableAmmo)
-                    {
-                        goto default;
-                    }
-                    return inventoryInfo.ComputeAmountThatFits(definitionId);
-                case TypeRequests.Special:
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
-                    return GetRequestAmount(inventoryInfo, definitionId, currentValue);
-                default:
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests != null && inventoryInfo.Requests.ContainsKey(definitionId))
-                    {
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetSpecialRequestAmount(inventoryInfo, definitionId, currentValue)}");
-                        return GetRequestAmount(inventoryInfo, definitionId, currentValue);
-                    }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Tools) && allTools.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-                    if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+                }
+                else
+                {
                     return -currentValue;
+                }
             }
-        }
+            else if (typeRequests == TypeRequests.ReactorFuel)
+            {
+                var reactor = inventoryInfo.Block as IMyReactor;
+                if (reactor == null)
+                {
+                    return -currentValue;
+                }
 
+                MyFixedPoint availableForDistribution;
+                if (!workData.AvailableForDistribution.TryGetValue(definitionId, out availableForDistribution) || availableForDistribution <= MyFixedPoint.Zero)
+                {
+                    return MyFixedPoint.Zero;
+                }
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} availableForDistribution {availableForDistribution}");
+                var typeKey = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, definitionId);
+                int typeRequestCount;
+                if (!workData.RequestTypeCount.TryGetValue(typeKey, out typeRequestCount) || availableForDistribution <= 0)
+                {
+                    return MyFixedPoint.Zero;
+                }
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} typeRequestCount {typeRequestCount}");
+
+                var configuredExpected = reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel;
+
+                // <= 0 disables the feature
+                if (configuredExpected <= 0)
+                {
+                    return MyFixedPoint.Zero;
+                }
+
+                var expectedAmount = (MyFixedPoint)Math.Min(
+                     (float)availableForDistribution / (float)typeRequestCount,
+                     ((float)configuredExpected * reactor.PowerOutputMultiplier)
+                    );
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
+                virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+
+                if (virtualAmount < expectedAmount * 0.5f)
+                {
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning ({expectedAmount} - {virtualAmount}) {expectedAmount - virtualAmount}");
+                    return expectedAmount - virtualAmount;
+                }
+                else if (currentValue > expectedAmount)
+                {
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning ({expectedAmount} - {currentValue}) {expectedAmount - currentValue}");
+                    return expectedAmount - currentValue;
+                }
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
+                return MyFixedPoint.Zero;
+            }
+            else if (typeRequests == TypeRequests.ConsumableAmmo)
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+            // If additional flags exist, let them fall to other cases
+            if (typeRequests.HasFlag(TypeRequests.Special))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetRequestAmount(inventoryInfo, definitionId, currentValue)}");
+                return GetRequestAmount(inventoryInfo, definitionId, currentValue);
+            }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests != null && inventoryInfo.Requests.ContainsKey(definitionId))
+            {
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetRequestAmount(inventoryInfo, definitionId, currentValue)}");
+                return GetRequestAmount(inventoryInfo, definitionId, currentValue);
+            }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Tools) && allTools.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+            return -currentValue;
+        }
         private static MyFixedPoint GetRequestAmount(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue)
         {
             RequestData requestInfo;
@@ -1004,10 +1031,10 @@ namespace CargoSorter
             //}
 
             var transferRequestCount = ExecuteMovementData(workData);
-            DisplayResults(workData, transferRequestCount);
+            DisplaySortResults(workData, transferRequestCount);
         }
 
-        private void DisplayResults(CargoSorterWorkData workData, int transferRequestCount)
+        private void DisplaySortResults(CargoSorterWorkData workData, int transferRequestCount)
         {
             var validationFailedBlocks = new Dictionary<IMyCubeBlock, RequestValidationStatus>();
             foreach (var inventory in workData.Inventories)
@@ -1294,32 +1321,629 @@ namespace CargoSorter
             return transferRequests;
         }
 
+        private void SetProductionQuotasAction(WorkData data)
+        {
+            try
+            {
+                var workData = (QuotaManagerWorkData)data;
+                var tree = new GridConnectorTree(workData.Block.CubeGrid);
+                var nodes = tree.GatherRecursive(c =>
+                {
+                    return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
+                    c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
+                });
+
+                foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
+                {
+                    GatherQuotaAndAssemblers(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
+                }
+
+                TrimUnhandledItems(workData);
+
+                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Item quota differences:");
+                foreach (var item in workData.MissingItems)
+                {
+                    if (item.Value > 0)
+                    {
+                        MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Missing: {item.Value}");
+                    }
+                    else
+                    {
+                        MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Excess: {-item.Value}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota management failed with exception:\n{ex}");
+                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Internal error: {ex.Message}");
+            }
+        }
+
+        private static void TrimUnhandledItems(QuotaManagerWorkData workData)
+        {
+            // Trim any items that are missing that can't be handled by any assembler
+            foreach (var item in workData.MissingItems)
+            {
+                // Nothing to do with this item, we have exactly enough
+                if (item.Value == 0)
+                {
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} 0 items");
+                    workData.ItemAvailableAssemblers.Add(item.Key, null);
+                    continue;
+                }
+
+                bool itemSatisfied = false;
+                // Check to see if there any disassemblers that can handle this item
+                if (item.Value < 0 && !workData.ActiveAssembling.Contains(item.Key))
+                {
+                    foreach (var quotaItem in workData.QuotaInfo.QuotaItems)
+                    {
+                        if (quotaItem.ItemId == item.Key)
+                        {
+                            if (quotaItem.Flag == RequestFlags.Minimum)
+                            {
+                                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is minimum and item is over required");
+                                workData.ItemAvailableAssemblers.Add(item.Key, null);
+                                itemSatisfied = true;
+                            }
+                            break;
+                        }
+                    }
+                    if (itemSatisfied)
+                    {
+                        break;
+                    }
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for disassemblers for {item.Key}");
+                    foreach (var assembler in workData.GroupAssemblers)
+                    {
+                        if (assembler.AllowDisassembly)
+                        {
+                            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found disassembler {assembler.Block.DisplayNameText}");
+                            MyBlueprintDefinitionBase bluePrintDef;
+                            if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(item.Key, out bluePrintDef))
+                            {
+                                if (assembler.Block.CanUseBlueprint(bluePrintDef))
+                                {
+                                    var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(item.Key, new List<AssemblerQuotaInfo>());
+                                    availableAssemblers.Add(assembler);
+                                    workData.MarkedForDisassembly.Add(assembler.Block);
+                                    workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
+                                    itemSatisfied = true;
+                                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.DisplayNameText} for disassembly");
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (item.Value > 0 && !workData.ActiveDisassembling.Contains(item.Key))
+                {
+                    foreach (var quotaItem in workData.QuotaInfo.QuotaItems)
+                    {
+                        if (quotaItem.ItemId == item.Key)
+                        {
+                            if (quotaItem.Flag == RequestFlags.Limit)
+                            {
+                                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is limit and item is under limit");
+                                workData.ItemAvailableAssemblers.Add(item.Key, null);
+                                itemSatisfied = true;
+                            }
+                            break;
+                        }
+                    }
+                    if (itemSatisfied)
+                    {
+                        break;
+                    }
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for assemblers for {item.Key}");
+                    foreach (var assembler in workData.GroupAssemblers)
+                    {
+                        if (assembler.AllowAssembly && !workData.MarkedForDisassembly.Contains(assembler.Block))
+                        {
+                            MyBlueprintDefinitionBase bluePrintDef;
+                            if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(item.Key, out bluePrintDef))
+                            {
+                                if (assembler.Block.CanUseBlueprint(bluePrintDef))
+                                {
+                                    var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(item.Key, new List<AssemblerQuotaInfo>());
+                                    availableAssemblers.Add(assembler);
+                                    workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
+                                    itemSatisfied = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!itemSatisfied)
+                {
+                    workData.ItemAvailableAssemblers.Add(item.Key, null);
+                }
+            }
+            // If there is no available weight that means we can't handle the item, trim it
+            foreach (var item in workData.ItemAvailableAssemblers)
+            {
+                if (item.Value == null || item.Value.Count == 0)
+                {
+                    if (workData.MissingItems.GetValueOrDefault(item.Key) == 0)
+                    {
+                        workData.MissingItems.Remove(item.Key);
+                    }
+                    continue;
+                }
+
+                // Reorder the assemblers as this is used later to handle assembly/disassembly priority
+                item.Value.SortNoAlloc((AssemblerQuotaInfo x, AssemblerQuotaInfo y) =>
+                {
+                    // Sort assemblers that clear their queue first
+                    var comparedClear = y.ClearQueue.CompareTo(x.ClearQueue);
+                    if (comparedClear == 0)
+                    {
+                        // Sort assemblers that have a higher weight first
+                        return y.AssemblerWeight.CompareTo(x.AssemblerWeight);
+                    }
+                    return comparedClear;
+                });
+            }
+        }
+
+        private void GatherQuotaAndAssemblers(IEnumerable<IMyTerminalBlock> blocks, QuotaManagerWorkData workData)
+        {
+            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: getting all assemblers for assembler group {workData.QuotaInfo.GroupName}");
+            foreach (var block in blocks)
+            {
+                if (!Util.IsValid(block) || block.InventoryCount == 0 || !block.HasLocalPlayerAccess() || IsIgnored(block))
+                {
+                    continue;
+                }
+                bool gatherInventoryContents = false;
+                if (block is IMyAssembler)
+                {
+                    var assembler = block as IMyAssembler;
+                    if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ?
+                        workData.Block == block :
+                        assembler.DisplayNameText.InsensitiveContains(workData.QuotaInfo.GroupName))
+                    {
+                        workData.GroupAssemblers.Add(ProductionQuotaInfo.ParseQuotaOptions(assembler));
+                        if (!assembler.IsQueueEmpty)
+                        {
+                            foreach (var queuedItem in assembler.GetQueue())
+                            {
+                                var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
+                                if (blueprint == null)
+                                {
+                                    continue;
+                                }
+                                foreach (var result in blueprint.Results)
+                                {
+                                    if (assembler.Mode == Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
+                                    {
+                                        workData.ActiveDisassembling.Add(result.Id);
+                                    }
+                                    else
+                                    {
+                                        workData.ActiveAssembling.Add(result.Id);
+                                    }
+                                }
+                            }
+                        }
+                        gatherInventoryContents = true;
+                    }
+                }
+                else
+                {
+                    gatherInventoryContents = block.DisplayNameText.InsensitiveContains(Instance.Config.QuotaContainerKeyword);
+                }
+
+                if (gatherInventoryContents)
+                {
+                    for (int i = 0; i < block.InventoryCount; i++)
+                    {
+                        var inventory = block.GetInventory(i) as MyInventory;
+                        foreach (var item in inventory.GetItems())
+                        {
+                            MyFixedPoint amount;
+                            if (workData.MissingItems.TryGetValue(item.Content.GetId(), out amount))
+                            {
+                                amount -= item.Amount;
+                                workData.MissingItems[item.Content.GetId()] = amount;
+                            }
+                        }
+                    }
+                }
+            }
+            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found {workData.GroupAssemblers.Count} assemblers for {workData.QuotaInfo.GroupName}");
+        }
+
+        private void SetProductionQuotasCallback(WorkData data)
+        {
+            jobTask = new Task();
+            var workData = (QuotaManagerWorkData)data;
+
+            ExecuteQueueChanges(workData);
+            DisplayQuotaResults(workData);
+        }
+
+        private void ExecuteQueueChanges(QuotaManagerWorkData workData)
+        {
+            // Iterate by QuotaItems so the priority order is preserved
+            // Reversed so that we can add to the first index every time and push other items back in queue
+            // and the highest priority is done last and therefore ends up being first.
+
+            for (int qi = workData.QuotaInfo.QuotaItems.Count - 1; qi >= 0; qi--)
+            {
+                var quotaItem = workData.QuotaInfo.QuotaItems[qi];
+                MyFixedPoint missingItemCount = workData.MissingItems.GetValueOrDefault(quotaItem.ItemId);
+                MyFixedPoint remainingToQueue = missingItemCount;
+
+                if (remainingToQueue == MyFixedPoint.Zero)
+                {
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - 0 items");
+                    continue;
+                }
+
+                var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(quotaItem.ItemId, null);
+                if (availableAssemblers == null)
+                {
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no available assemblers");
+                    continue;
+                }
+
+                var blueprint = MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(quotaItem.ItemId);
+                if (blueprint == null)
+                {
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no blueprint");
+                    continue;
+                }
+
+                float totalWeight = 0;
+                for (int ai = availableAssemblers.Count - 1; ai >= 0; ai--)
+                {
+                    var assembler = availableAssemblers[ai];
+                    // Last chance to skip if it's been destroyed or something
+                    if (Util.IsValid(assembler.Block) && assembler.Block.CanUseBlueprint(blueprint))
+                    {
+                        totalWeight += assembler.AssemblerWeight;
+                        if (!assembler.Block.IsQueueEmpty)
+                        {
+                            var queue = assembler.Block.GetQueue();
+                            for (int i = queue.Count - 1; i >= 0; i--)
+                            {
+                                var queueItem = queue[i];
+                                var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
+                                if (queuedBlueprint == blueprint)
+                                {
+                                    remainingToQueue -= MyFixedPoint.Min(queueItem.Amount, remainingToQueue);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        availableAssemblers.RemoveAtFast(ai);
+                    }
+                }
+
+                // Out of items to queue, go to next item
+                if (remainingToQueue == MyFixedPoint.Zero)
+                {
+                    break;
+                }
+
+                foreach (var assembler in availableAssemblers)
+                {
+                    if (workData.MarkedForDisassembly.Contains(assembler.Block) && assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
+                    {
+                        assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly;
+                    }
+
+                    // Get the absolute quota amount here as it will be negative if this is a disassembly operation
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: remaining: {(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue)} Weighted: {MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount))}");
+                    var assignedAmount = MyFixedPoint.Min(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue, MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount)));
+                    // Validity checked from the check during total weight determination
+                    if (!assembler.Block.IsQueueEmpty)
+                    {
+                        var queue = assembler.Block.GetQueue();
+                        for (int i = queue.Count - 1; i >= 0; i--)
+                        {
+                            var queueItem = queue[i];
+                            var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
+                            if (queuedBlueprint == blueprint)
+                            {
+                                assignedAmount -= MyFixedPoint.Min(queueItem.Amount, assignedAmount);
+                            }
+                            else
+                            {
+                                if (assembler.ClearQueue)
+                                {
+                                    bool hasAnyItem = false;
+                                    foreach (var result in queuedBlueprint.Results)
+                                    {
+                                        if (workData.MissingItems.ContainsKey(result.Id))
+                                        {
+                                            hasAnyItem = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!hasAnyItem)
+                                    {
+                                        assembler.Block.RemoveQueueItem(i, queueItem.Amount);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (remainingToQueue < 0 && assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
+                    {
+                        assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly;
+                    }
+                    else if (remainingToQueue > 0 && assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly)
+                    {
+                        assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly;
+                    }
+
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
+                    assembler.Block.InsertQueueItem(0, blueprint, assignedAmount);
+                    // Reverse the absolute so that we "add" items to negative values
+                    remainingToQueue -= remainingToQueue >= MyFixedPoint.Zero ? assignedAmount : -assignedAmount;
+                    // Out of items to queue, go to next item
+                    if (remainingToQueue == MyFixedPoint.Zero)
+                    {
+                        break;
+                    }
+                }
+            }
+
+        }
+        private void DisplayQuotaResults(QuotaManagerWorkData workData)
+        {
+            switch (workData.ResultsType)
+            {
+                case ResultsDisplayType.Chat:
+                    if (Config.ShowProgressNotifications)
+                    {
+                        if (workData.MissingItems.Count == 0)
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", "No quota changes needed.");
+                        }
+                        else
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"{workData.MissingItems.Count} quota changes requested.");
+                        }
+                    }
+
+                    if (workData.QuotaInfo.RequestStatus != RequestValidationStatus.Valid)
+                    {
+                        if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
+                        {
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on assembler '{workData.Block.DisplayNameText}'");
+                        }
+
+                        else if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidItem) || workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCount))
+                        {
+                            var ini = new MyIni();
+                            var terminalBlock = workData.Block as IMyTerminalBlock;
+                            if (Util.IsValid(terminalBlock) && ini.TryParse(terminalBlock.CustomData))
+                            {
+                                if (ini.ContainsSection(ProductionQuotaInfo.QuotaSectionName))
+                                {
+                                    List<MyIniKey> iniKeys = new List<MyIniKey>();
+                                    ini.GetKeys(ProductionQuotaInfo.QuotaSectionName, iniKeys);
+
+                                    foreach (var iniKey in iniKeys)
+                                    {
+                                        if (iniKey.IsEmpty)
+                                        {
+                                            continue;
+                                        }
+                                        MyDefinitionId definitionId;
+                                        if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
+                                        {
+                                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.DisplayNameText}'");
+                                            continue;
+                                        }
+
+                                        var value = ini.Get(iniKey);
+                                        var valueString = value.ToString();
+                                        int itemCount;
+                                        if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                        {
+                                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.DisplayNameText}'");
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case ResultsDisplayType.Window:
+                    var groups = new Dictionary<string, Dictionary<string, MyFixedPoint>>();
+                    StringBuilder warningsBuilder = null;
+
+                    if (workData.QuotaInfo.RequestStatus != RequestValidationStatus.Valid)
+                    {
+                        warningsBuilder = new StringBuilder();
+
+                        warningsBuilder.AppendFormat("{0}:\n", workData.Block.DisplayNameText);
+
+                        if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
+                        {
+                            warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as an inventory request. Clear the block's Custom Data and set it up again or remove the Limited/Special tag.");
+                        }
+                        else if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidItem) || workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCount))
+                        {
+                            warningsBuilder.AppendLine("These lines in the block's Custom Data are not valid:");
+                            var ini = new MyIni();
+                            var terminalBlock = workData.Block as IMyTerminalBlock;
+                            if (Util.IsValid(terminalBlock) && ini.TryParse(terminalBlock.CustomData))
+                            {
+                                if (ini.ContainsSection(ProductionQuotaInfo.QuotaSectionName))
+                                {
+                                    List<MyIniKey> iniKeys = new List<MyIniKey>();
+                                    ini.GetKeys(ProductionQuotaInfo.QuotaSectionName, iniKeys);
+
+                                    foreach (var iniKey in iniKeys)
+                                    {
+                                        if (iniKey.IsEmpty)
+                                        {
+                                            continue;
+                                        }
+                                        MyDefinitionId definitionId;
+                                        if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
+                                        {
+                                            warningsBuilder.AppendFormat("Unknown item: {0}", iniKey.Name).AppendLine();
+                                            continue;
+                                        }
+
+                                        var value = ini.Get(iniKey);
+                                        var valueString = value.ToString();
+                                        int itemCount;
+                                        if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                        {
+                                            warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    foreach (var item in workData.ItemAvailableAssemblers)
+                    {
+                        if (item.Value == null || item.Value.Count == 0)
+                        {
+                            var missingCount = workData.MissingItems.GetValueOrDefault(item.Key);
+                            if (missingCount == 0)
+                            {
+                                continue;
+                            }
+                            if (warningsBuilder == null)
+                            {
+                                warningsBuilder = new StringBuilder();
+                            }
+                            var itemName = GetFriendlyDefinitionName(item.Key);
+                            if (missingCount > 0 && workData.ActiveDisassembling.Contains(item.Key))
+                            {
+                                warningsBuilder.AppendFormat("{0} is currently being disassembled but is {1} units below quota", itemName, missingCount).AppendLine();
+                            }
+                            else if (missingCount < 0 && workData.ActiveAssembling.Contains(item.Key))
+                            {
+                                warningsBuilder.AppendFormat("{0} is currently being assembled but is {1} units above quota", itemName, missingCount).AppendLine();
+                            }
+                            else
+                            {
+                                warningsBuilder.AppendFormat("No available assemblers to handle {0} {1}", missingCount > 0 ? "missing" : "excess", itemName).AppendLine();
+                            }
+                        }
+                    }
+                    if (warningsBuilder != null)
+                    {
+                        Util.TrimTrailingWhitespace(warningsBuilder);
+                    }
+
+                    foreach (var availability in workData.MissingItems)
+                    {
+                        if (availability.Value == MyFixedPoint.Zero)
+                        {
+                            continue;
+                        }
+                        string friendlyName = GetFriendlyTypeName(availability.Key);
+                        var group = groups.GetValueOrNew(friendlyName);
+                        group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
+                        groups[friendlyName] = group;
+                    }
+
+                    var displayStringBuilder = new StringBuilder();
+
+                    if (workData.ItemAvailableAssemblers.Count == 0 || workData.MissingItems.Count == 0)
+                    {
+                        displayStringBuilder.Append("No quota changes needed.");
+                    }
+                    else
+                    {
+                        displayStringBuilder.AppendLine();
+                        displayStringBuilder.AppendLine();
+                        if (warningsBuilder != null)
+                        {
+                            displayStringBuilder.AppendLine("Warnings:");
+                            displayStringBuilder.AppendStringBuilder(warningsBuilder);
+                            displayStringBuilder.AppendLine();
+                            displayStringBuilder.AppendLine();
+                        }
+                        if (groups.Count > 0)
+                        {
+                            displayStringBuilder.AppendLine("Items:");
+                            foreach (var group in groups.OrderBy(g => g.Key))
+                            {
+                                displayStringBuilder.AppendFormat("{0}:\n", group.Key);
+                                foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
+                                {
+                                    if (subTypeValue.Value > 0)
+                                    {
+                                        displayStringBuilder.AppendFormat("{0}: {1} missing\n", subTypeValue.Key, MyFixedPoint.Ceiling(subTypeValue.Value));
+                                    }
+                                    else
+                                    {
+                                        displayStringBuilder.AppendFormat("{0}: {1} excess\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                    }
+                                }
+                                displayStringBuilder.AppendLine();
+                            }
+                        }
+                        Util.TrimTrailingWhitespace(displayStringBuilder);
+                    }
+
+                    var stringToShow = "Quota Check Complete";
+
+                    if (warningsBuilder != null && groups.Count > 0)
+                    {
+                        stringToShow = "Warnings and Missing Items";
+                    }
+                    else if (warningsBuilder == null && groups.Count > 0)
+                    {
+                        stringToShow = "Missing Items";
+                    }
+                    else if (warningsBuilder != null && groups.Count == 0)
+                    {
+                        stringToShow = "Warnings";
+                    }
+
+                    MyAPIGateway.Utilities.ShowMissionScreen("Quota Manager", string.Empty, stringToShow, displayStringBuilder.ToString(), (clickResult) =>
+                    {
+                        if (Config.CopyResultsToClipboard && groups.Count > 0 && clickResult == ResultEnum.OK)
+                        {
+                            var clipboardStringBuilder = new StringBuilder();
+                            foreach (var group in groups.OrderBy(g => g.Key))
+                            {
+                                foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
+                                {
+                                    clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                }
+                            }
+                            MyClipboardHelper.SetClipboard(clipboardStringBuilder.ToString());
+                        }
+                    }, Config.CopyResultsToClipboard && groups.Count > 0 ? "Copy to Clipboard" : null);
+
+                    break;
+                default:
+                    break;
+            }
+
+        }
+
         private void CustomActionGetter(IMyTerminalBlock block, List<IMyTerminalAction> actions)
         {
-            if (block is IMyShipController)
-            {
-                actions.Add(TerminalControls.SortAction);
-            }
+            TerminalControls.DoOnce();
+            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
         }
 
         private void CustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
         {
-            if (block is IMyShipController)
-            {
-                controls.AddOrInsert(TerminalControls.SortButton, 5);
-            }
-            else if (block is IMyAssembler)
-            {
-                controls.EnsureCapacity(controls.Count + 4);
-                controls.Add(TerminalControls.GeneratePrerequisiteCustomDataFromQueue);
-                controls.Add(TerminalControls.GenerateResultCustomDataFromQueue);
-                controls.Add(TerminalControls.GenerateQueueFromCustomData);
-                controls.Add(TerminalControls.ClearAssemblerQueue);
-            }
-            else if (block is IMyProjector)
-            {
-                controls.Add(TerminalControls.GenerateCustomDataFromProjection);
-            }
+            TerminalControls.DoOnce();
+            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
         }
 
         private string BuildAllSortableItemNamesString()
@@ -1389,8 +2013,8 @@ namespace CargoSorter
             {
                 wcApi.Unload();
             }
-            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
-            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
+            //MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+            //MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             Instance = null;
         }
