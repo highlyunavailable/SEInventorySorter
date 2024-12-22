@@ -135,9 +135,8 @@ namespace CargoSorter
 
         public override void BeforeStart()
         {
-            //MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
-            //MyAPIGateway.TerminalControls.CustomActionGetter += CustomActionGetter;
-            TerminalControls.DoOnce();
+            MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
+            MyAPIGateway.TerminalControls.CustomActionGetter += CustomActionGetter;
             if (!wcApi.IsReady)
             {
                 wcApi.Load(OnWcReady, true);
@@ -1938,11 +1937,13 @@ namespace CargoSorter
         {
             TerminalControls.DoOnce();
             MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
+            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
         }
 
         private void CustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
         {
             TerminalControls.DoOnce();
+            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
         }
 
@@ -2013,8 +2014,8 @@ namespace CargoSorter
             {
                 wcApi.Unload();
             }
-            //MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
-            //MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
+            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             Instance = null;
         }
