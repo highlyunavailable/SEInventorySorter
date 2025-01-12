@@ -66,36 +66,42 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
                     allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Ore");
                 }
+
                 if (definition.IsIngot)
                 {
                     allIngots.Add(definition.Id);
                     allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Ingot");
                 }
+
                 if (definition is MyUsableItemDefinition || definition is MyDatapadDefinition || definition is MyPackageDefinition || definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
                 {
                     allTools.Add(definition.Id);
                     allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Item");
                 }
+
                 if (definition is MyOxygenContainerDefinition)
                 {
                     allBottles.Add(definition.Id);
                     allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Bottle");
                 }
+
                 if (definition is MyComponentDefinition)
                 {
                     allComponents.Add(definition.Id);
                     allVolumes.Add(definition.Id, definition.Volume);
                     MakeNormalizedId(definition.Id, "Component");
                 }
+
                 if (definition is MyAmmoMagazineDefinition)
                 {
                     allAmmo.Add(definition.Id);
@@ -103,12 +109,14 @@ namespace CargoSorter
                     MakeNormalizedId(definition.Id, "Ammo");
                 }
             }
+
             foreach (var definition in MyDefinitionManager.Static.GetHandItemDefinitions())
             {
                 if (!definition.Enabled || !definition.Public)
                 {
                     continue;
                 }
+
                 var handPhysicalItem = MyDefinitionManager.Static.GetPhysicalItemForHandItem(definition.Id);
                 if (handPhysicalItem != null && handPhysicalItem.Enabled && handPhysicalItem.Public)
                 {
@@ -248,8 +256,7 @@ namespace CargoSorter
 
                 BeginSortJob(shipController.CubeGrid, profile, ResultsDisplayType.Chat);
             }
-            else
-            if (messageText.StartsWith("/getallsortableitems", StringComparison.OrdinalIgnoreCase))
+            else if (messageText.StartsWith("/getallsortableitems", StringComparison.OrdinalIgnoreCase))
             {
                 sendToOthers = false;
                 var allSortable = BuildAllSortableItemNamesString();
@@ -300,6 +307,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 foreach (var prerequisite in blueprint.Prerequisites)
                 {
                     queuePrerequisites[prerequisite.Id] = queuePrerequisites.GetValueOrDefault(prerequisite.Id) + prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
@@ -327,6 +335,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 foreach (var result in blueprint.Results)
                 {
                     queueResults[result.Id] = queueResults.GetValueOrDefault(result.Id) + result.Amount * queuedItem.Amount;
@@ -351,6 +360,7 @@ namespace CargoSorter
             {
                 return false;
             }
+
             var inventoryInfo = new InventoryInfo(inputInventory, null);
 
             if (inventoryInfo.Requests == null)
@@ -377,6 +387,7 @@ namespace CargoSorter
             {
                 return string.Empty;
             }
+
             List<IMySlimBlock> projectedBlocks = new List<IMySlimBlock>();
             projectorProxy.GetBlocks(projectedBlocks);
             var components = new Dictionary<MyDefinitionId, MyFixedPoint>();
@@ -387,6 +398,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 foreach (var component in blockDef.Components)
                 {
                     var amount = components.GetValueOrDefault(component.Definition.Id);
@@ -413,7 +425,7 @@ namespace CargoSorter
                 var nodes = tree.GatherRecursive(c =>
                 {
                     return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
-                    c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
+                           c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
                 });
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
@@ -478,6 +490,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 for (int i = 0; i < block.InventoryCount; i++)
                 {
                     var inventory = block.GetInventory(i) as MyInventory;
@@ -487,6 +500,7 @@ namespace CargoSorter
                     {
                         workData.AvailableForDistribution[item.Key] = workData.AvailableForDistribution.GetValueOrDefault(item.Key) + item.Value;
                     }
+
                     if ((inventoryInfo.TypeRequests.HasFlag(TypeRequests.Special) || inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited)) && inventoryInfo.Requests != null)
                     {
                         foreach (var request in inventoryInfo.Requests)
@@ -500,6 +514,7 @@ namespace CargoSorter
                             workData.AvailableForDistribution[request.Key] = workData.AvailableForDistribution.GetValueOrDefault(request.Key) - request.Value.Amount;
                         }
                     }
+
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ReactorFuel))
                     {
                         var reactor = block as IMyReactor;
@@ -507,6 +522,7 @@ namespace CargoSorter
                         {
                             continue;
                         }
+
                         var def = MyDefinitionManager.Static.GetDefinition(block.BlockDefinition) as MyReactorDefinition;
                         if (def == null || def.FuelInfos == null || def.FuelInfos.Length != 1)
                         {
@@ -516,7 +532,6 @@ namespace CargoSorter
                         var fuelInfo = def.FuelInfos.First();
                         var key = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, fuelInfo.FuelId);
                         workData.RequestTypeCount[key] = workData.RequestTypeCount.GetValueOrDefault(key) + 1;
-
                     }
                     else if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ConsumableAmmo))
                     {
@@ -555,12 +570,14 @@ namespace CargoSorter
                 }
             }
         }
+
         private bool IsIgnored(IMyTerminalBlock block)
         {
             if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block) && !(block.DisplayNameText.InsensitiveContains(Config.SpecialContainerKeyword) || block.DisplayNameText.InsensitiveContains(Config.LimitedContainerKeyword)))
             {
                 return true;
             }
+
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
                 if (block.DisplayNameText.InsensitiveContains(item))
@@ -568,6 +585,7 @@ namespace CargoSorter
                     return true;
                 }
             }
+
             return false;
         }
 
@@ -582,10 +600,12 @@ namespace CargoSorter
                     {
                         continue;
                     }
+
                     var pool = workData.ExcessPools.GetValueOrNew(item.Key);
                     pool.Add(new ExcessInfo(inventory, excess));
                 }
             }
+
             // Put the lowest priority inventories first so the highest priority can be popped off the end
             foreach (var pool in workData.ExcessPools)
             {
@@ -664,6 +684,7 @@ namespace CargoSorter
                             inventoryExcess.Amount -= amountToBeMoved;
                             pool.Value[i] = inventoryExcess;
                         }
+
                         // Recalculate how much is needed and bail out of we don't want any more
                         destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(pool.Key);
                         amountWanted = CalculateAmountWanted(destInventory, pool.Key, destCurrentAmount, workData);
@@ -675,6 +696,7 @@ namespace CargoSorter
                 }
             }
         }
+
         private void BuildDesiredItemMovement(CargoSorterWorkData workData)
         {
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
@@ -758,6 +780,7 @@ namespace CargoSorter
                             //MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {virtualItemKey} with amount {amountToBeMoved} to inventory");
                             continue;
                         }
+
                         AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, virtualItemKey, amountToBeMoved, volumeToBeMoved, massToBeMoved));
                     }
                 }
@@ -770,6 +793,7 @@ namespace CargoSorter
             {
                 return -currentValue;
             }
+
             MyFixedPoint virtualAmount;
             var percentFull = (float)inventoryInfo.VirtualVolume / (float)inventoryInfo.MaxVolume;
 
@@ -786,6 +810,7 @@ namespace CargoSorter
                 {
                     return -currentValue;
                 }
+
                 virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
                 // <= 0 disables the feature
@@ -796,8 +821,8 @@ namespace CargoSorter
 
                 return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
                     ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
-                    (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
-                    (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
+                        (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
+                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
                     : MyFixedPoint.Zero;
             }
             else if (typeRequests == TypeRequests.AssemblerIngots)
@@ -815,6 +840,7 @@ namespace CargoSorter
                                 // Always clear output side when assembling
                                 return -currentValue;
                             }
+
                             constraintToCheck = ((MyInventory)assembler.InputInventory)?.Constraint;
                             break;
                         case Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly:
@@ -823,6 +849,7 @@ namespace CargoSorter
                                 // Always clear input side when disassembling
                                 return -currentValue;
                             }
+
                             constraintToCheck = ((MyInventory)assembler.OutputInventory)?.Constraint;
                             break;
                     }
@@ -846,6 +873,7 @@ namespace CargoSorter
                                 {
                                     continue;
                                 }
+
                                 newAmount += prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
                             }
                         }
@@ -855,6 +883,7 @@ namespace CargoSorter
                         return assembler.UseConveyorSystem && newAmount > MyFixedPoint.Zero ? MyFixedPoint.Zero : newAmount;
                     }
                 }
+
                 // If the assembler is off or full somehow, just take everything out.
                 return -currentValue;
             }
@@ -870,6 +899,7 @@ namespace CargoSorter
                         return refinery.IsProducing && refinery.Enabled ? MyFixedPoint.Zero : -currentValue;
                     }
                 }
+
                 // If this is the refinery output, or the refinery is off or full somehow, take everything out.
                 return -currentValue;
             }
@@ -910,6 +940,7 @@ namespace CargoSorter
                 {
                     return MyFixedPoint.Zero;
                 }
+
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} availableForDistribution {availableForDistribution}");
                 var typeKey = new ValueTuple<TypeRequests, MyDefinitionId>(TypeRequests.ReactorFuel, definitionId);
                 int typeRequestCount;
@@ -928,9 +959,9 @@ namespace CargoSorter
                 }
 
                 var expectedAmount = (MyFixedPoint)Math.Min(
-                     (float)availableForDistribution / (float)typeRequestCount,
-                     ((float)configuredExpected * reactor.PowerOutputMultiplier)
-                    );
+                    (float)availableForDistribution / (float)typeRequestCount,
+                    ((float)configuredExpected * reactor.PowerOutputMultiplier)
+                );
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
                 virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
@@ -944,6 +975,7 @@ namespace CargoSorter
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning ({expectedAmount} - {currentValue}) {expectedAmount - currentValue}");
                     return expectedAmount - currentValue;
                 }
+
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
                 return MyFixedPoint.Zero;
             }
@@ -951,25 +983,53 @@ namespace CargoSorter
             {
                 return inventoryInfo.ComputeAmountThatFits(definitionId);
             }
+
             // If additional flags exist, let them fall to other cases
             if (typeRequests.HasFlag(TypeRequests.Special))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Special request amount {definitionId} {GetRequestAmount(inventoryInfo, definitionId, currentValue)}");
                 return GetRequestAmount(inventoryInfo, definitionId, currentValue);
             }
+
             if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests != null && inventoryInfo.Requests.ContainsKey(definitionId))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetRequestAmount(inventoryInfo, definitionId, currentValue)}");
                 return GetRequestAmount(inventoryInfo, definitionId, currentValue);
             }
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Tools) && allTools.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId)) { return inventoryInfo.ComputeAmountThatFits(definitionId); }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Tools) && allTools.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
             return -currentValue;
         }
+
         private static MyFixedPoint GetRequestAmount(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue)
         {
             RequestData requestInfo;
@@ -977,6 +1037,7 @@ namespace CargoSorter
             {
                 return -currentValue;
             }
+
             if (inventoryInfo.Requests.TryGetValue(definitionId, out requestInfo))
             {
                 MyFixedPoint virtualAmount;
@@ -988,8 +1049,10 @@ namespace CargoSorter
                 {
                     return MyFixedPoint.Min(inventoryInfo.ComputeAmountThatFits(definitionId, true), requestInfo.Amount - virtualAmount);
                 }
+
                 return MyFixedPoint.Zero;
             }
+
             return -currentValue;
         }
 
@@ -1067,6 +1130,7 @@ namespace CargoSorter
                         {
                             MyAPIGateway.Utilities.ShowMessage("Sorter", $"Warning: Requested items on '{failedBlock.Key.DisplayNameText}' will not fit!");
                         }
+
                         if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
                             MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{failedBlock.Key.DisplayNameText}'");
@@ -1079,6 +1143,7 @@ namespace CargoSorter
                             {
                                 continue;
                             }
+
                             if (!ini.ContainsSection("Inventory"))
                             {
                                 continue;
@@ -1093,6 +1158,7 @@ namespace CargoSorter
                                 {
                                     continue;
                                 }
+
                                 MyDefinitionId definitionId;
                                 if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                                 {
@@ -1125,9 +1191,11 @@ namespace CargoSorter
                             {
                                 continue;
                             }
+
                             MyAPIGateway.Utilities.ShowMessage("Needed", $"{MyFixedPoint.Ceiling(-availability.Value)} {GetFriendlyDefinitionName(availability.Key)}");
                         }
                     }
+
                     break;
                 case ResultsDisplayType.Window:
                     var groups = new Dictionary<string, Dictionary<string, MyFixedPoint>>();
@@ -1144,6 +1212,7 @@ namespace CargoSorter
                             {
                                 warningsBuilder.AppendLine("The block's Custom Data requests more items than can possibly fit in its inventory. Reduce the number of items desired or move the Custom Data, tag and priority to a block with more inventory space.");
                             }
+
                             if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCustomData))
                             {
                                 warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as an inventory request. Clear the block's Custom Data and set it up again or remove the Limited/Special tag.");
@@ -1157,6 +1226,7 @@ namespace CargoSorter
                                 {
                                     continue;
                                 }
+
                                 if (!ini.ContainsSection("Inventory"))
                                 {
                                     continue;
@@ -1171,6 +1241,7 @@ namespace CargoSorter
                                     {
                                         continue;
                                     }
+
                                     MyDefinitionId definitionId;
                                     if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                                     {
@@ -1196,6 +1267,7 @@ namespace CargoSorter
 
                             warningsBuilder.AppendLine();
                         }
+
                         Util.TrimTrailingWhitespace(warningsBuilder);
                     }
 
@@ -1205,6 +1277,7 @@ namespace CargoSorter
                         {
                             continue;
                         }
+
                         string friendlyName = GetFriendlyTypeName(availability.Key);
                         var group = groups.GetValueOrNew(friendlyName);
                         group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
@@ -1233,6 +1306,7 @@ namespace CargoSorter
                             displayStringBuilder.AppendLine();
                             displayStringBuilder.AppendLine();
                         }
+
                         if (groups.Count > 0)
                         {
                             displayStringBuilder.AppendLine("Missing Items:");
@@ -1243,9 +1317,11 @@ namespace CargoSorter
                                 {
                                     displayStringBuilder.AppendFormat("{0}: {1}\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
+
                                 displayStringBuilder.AppendLine();
                             }
                         }
+
                         Util.TrimTrailingWhitespace(displayStringBuilder);
                     }
 
@@ -1276,6 +1352,7 @@ namespace CargoSorter
                                     clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
                             }
+
                             MyClipboardHelper.SetClipboard(clipboardStringBuilder.ToString());
                         }
                     }, Config.CopyResultsToClipboard && groups.Count > 0 ? "Copy to Clipboard" : null);
@@ -1306,6 +1383,7 @@ namespace CargoSorter
                     {
                         continue;
                     }
+
                     var toTransfer = MyFixedPoint.Min(item.Amount, needToMove);
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
@@ -1317,6 +1395,7 @@ namespace CargoSorter
                     }
                 }
             }
+
             return transferRequests;
         }
 
@@ -1329,7 +1408,7 @@ namespace CargoSorter
                 var nodes = tree.GatherRecursive(c =>
                 {
                     return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
-                    c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
+                           c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
                 });
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
@@ -1386,13 +1465,16 @@ namespace CargoSorter
                                 workData.ItemAvailableAssemblers.Add(item.Key, null);
                                 itemSatisfied = true;
                             }
+
                             break;
                         }
                     }
+
                     if (itemSatisfied)
                     {
-                        break;
+                        continue;
                     }
+
                     MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for disassemblers for {item.Key}");
                     foreach (var assembler in workData.GroupAssemblers)
                     {
@@ -1427,13 +1509,16 @@ namespace CargoSorter
                                 workData.ItemAvailableAssemblers.Add(item.Key, null);
                                 itemSatisfied = true;
                             }
+
                             break;
                         }
                     }
+
                     if (itemSatisfied)
                     {
-                        break;
+                        continue;
                     }
+
                     MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for assemblers for {item.Key}");
                     foreach (var assembler in workData.GroupAssemblers)
                     {
@@ -1459,15 +1544,35 @@ namespace CargoSorter
                     workData.ItemAvailableAssemblers.Add(item.Key, null);
                 }
             }
+
             // If there is no available weight that means we can't handle the item, trim it
             foreach (var item in workData.ItemAvailableAssemblers)
             {
                 if (item.Value == null || item.Value.Count == 0)
                 {
-                    if (workData.MissingItems.GetValueOrDefault(item.Key) == 0)
+                    var missingCount = workData.MissingItems.GetValueOrDefault(item.Key);
+                    var removeMissing = missingCount == 0;
+                    if (!removeMissing) // Check to see if a flag satisfies it instead
                     {
+                        foreach (var quotaItem in workData.QuotaInfo.QuotaItems)
+                        {
+                            if (quotaItem.ItemId == item.Key)
+                            {
+                                if ((quotaItem.Flag == RequestFlags.Minimum && missingCount < 0) || (quotaItem.Flag == RequestFlags.Limit && missingCount > 0))
+                                {
+                                    removeMissing = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (removeMissing)
+                    {
+                        MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} from MissingItems");
                         workData.MissingItems.Remove(item.Key);
                     }
+
                     continue;
                 }
 
@@ -1481,6 +1586,7 @@ namespace CargoSorter
                         // Sort assemblers that have a higher weight first
                         return y.AssemblerWeight.CompareTo(x.AssemblerWeight);
                     }
+
                     return comparedClear;
                 });
             }
@@ -1495,13 +1601,12 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 bool gatherInventoryContents = false;
                 if (block is IMyAssembler)
                 {
                     var assembler = block as IMyAssembler;
-                    if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ?
-                        workData.Block == block :
-                        assembler.DisplayNameText.InsensitiveContains(workData.QuotaInfo.GroupName))
+                    if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ? workData.Block == block : assembler.DisplayNameText.InsensitiveContains(workData.QuotaInfo.GroupName))
                     {
                         workData.GroupAssemblers.Add(ProductionQuotaInfo.ParseQuotaOptions(assembler));
                         if (!assembler.IsQueueEmpty)
@@ -1513,6 +1618,7 @@ namespace CargoSorter
                                 {
                                     continue;
                                 }
+
                                 foreach (var result in blueprint.Results)
                                 {
                                     if (assembler.Mode == Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
@@ -1526,6 +1632,7 @@ namespace CargoSorter
                                 }
                             }
                         }
+
                         gatherInventoryContents = true;
                     }
                 }
@@ -1551,6 +1658,7 @@ namespace CargoSorter
                     }
                 }
             }
+
             MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found {workData.GroupAssemblers.Count} assemblers for {workData.QuotaInfo.GroupName}");
         }
 
@@ -1664,6 +1772,7 @@ namespace CargoSorter
                                             break;
                                         }
                                     }
+
                                     if (!hasAnyItem)
                                     {
                                         assembler.Block.RemoveQueueItem(i, queueItem.Amount);
@@ -1693,8 +1802,8 @@ namespace CargoSorter
                     }
                 }
             }
-
         }
+
         private void DisplayQuotaResults(QuotaManagerWorkData workData)
         {
             switch (workData.ResultsType)
@@ -1736,6 +1845,7 @@ namespace CargoSorter
                                         {
                                             continue;
                                         }
+
                                         MyDefinitionId definitionId;
                                         if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                                         {
@@ -1756,6 +1866,7 @@ namespace CargoSorter
                             }
                         }
                     }
+
                     break;
                 case ResultsDisplayType.Window:
                     var groups = new Dictionary<string, Dictionary<string, MyFixedPoint>>();
@@ -1789,6 +1900,7 @@ namespace CargoSorter
                                         {
                                             continue;
                                         }
+
                                         MyDefinitionId definitionId;
                                         if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                                         {
@@ -1819,10 +1931,12 @@ namespace CargoSorter
                             {
                                 continue;
                             }
+
                             if (warningsBuilder == null)
                             {
                                 warningsBuilder = new StringBuilder();
                             }
+
                             var itemName = GetFriendlyDefinitionName(item.Key);
                             if (missingCount > 0 && workData.ActiveDisassembling.Contains(item.Key))
                             {
@@ -1838,6 +1952,7 @@ namespace CargoSorter
                             }
                         }
                     }
+
                     if (warningsBuilder != null)
                     {
                         Util.TrimTrailingWhitespace(warningsBuilder);
@@ -1849,6 +1964,7 @@ namespace CargoSorter
                         {
                             continue;
                         }
+
                         string friendlyName = GetFriendlyTypeName(availability.Key);
                         var group = groups.GetValueOrNew(friendlyName);
                         group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
@@ -1872,6 +1988,7 @@ namespace CargoSorter
                             displayStringBuilder.AppendLine();
                             displayStringBuilder.AppendLine();
                         }
+
                         if (groups.Count > 0)
                         {
                             displayStringBuilder.AppendLine("Items:");
@@ -1889,9 +2006,11 @@ namespace CargoSorter
                                         displayStringBuilder.AppendFormat("{0}: {1} excess\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
                                     }
                                 }
+
                                 displayStringBuilder.AppendLine();
                             }
                         }
+
                         Util.TrimTrailingWhitespace(displayStringBuilder);
                     }
 
@@ -1922,6 +2041,7 @@ namespace CargoSorter
                                     clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
                             }
+
                             MyClipboardHelper.SetClipboard(clipboardStringBuilder.ToString());
                         }
                     }, Config.CopyResultsToClipboard && groups.Count > 0 ? "Copy to Clipboard" : null);
@@ -1930,7 +2050,6 @@ namespace CargoSorter
                 default:
                     break;
             }
-
         }
 
         private void CustomActionGetter(IMyTerminalBlock block, List<IMyTerminalAction> actions)
@@ -1959,26 +2078,31 @@ namespace CargoSorter
                 sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
+
             foreach (var item in MakeSortedIdDefs(allIngots))
             {
                 sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
+
             foreach (var item in MakeSortedIdDefs(allComponents))
             {
                 sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
+
             foreach (var item in MakeSortedIdDefs(allAmmo))
             {
                 sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
+
             foreach (var item in MakeSortedIdDefs(allTools))
             {
                 sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
+
             foreach (var item in MakeSortedIdDefs(allBottles))
             {
                 sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
@@ -2000,6 +2124,7 @@ namespace CargoSorter
                 {
                     return new KeyValuePair<string, string>(GetFriendlyDefinitionName(i), def.DisplayNameText);
                 }
+
                 return default(KeyValuePair<string, string>);
             }).Where(i => !string.IsNullOrEmpty(i.Key)).OrderBy(i => i.Key);
         }
@@ -2010,10 +2135,12 @@ namespace CargoSorter
             {
                 return;
             }
+
             if (wcApi.IsReady)
             {
                 wcApi.Unload();
             }
+
             MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
             MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
@@ -2063,11 +2190,13 @@ namespace CargoSorter
             {
                 return default(MyDefinitionId);
             }
+
             var activeAmmo = wcApi.GetActiveAmmo(weapon, weaponId);
             if (string.IsNullOrEmpty(activeAmmo))
             {
                 return default(MyDefinitionId);
             }
+
             return wcAmmoMagazines.GetValueOrDefault(activeAmmo);
         }
     }
