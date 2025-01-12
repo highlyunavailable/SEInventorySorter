@@ -1418,18 +1418,18 @@ namespace CargoSorter
 
                 TrimUnhandledItems(workData);
 
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Item quota differences:");
-                foreach (var item in workData.MissingItems)
-                {
-                    if (item.Value > 0)
-                    {
-                        MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Missing: {item.Value}");
-                    }
-                    else
-                    {
-                        MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Excess: {-item.Value}");
-                    }
-                }
+                // MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Item quota differences:");
+                // foreach (var item in workData.MissingItems)
+                // {
+                //     if (item.Value > 0)
+                //     {
+                //         MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Missing: {item.Value}");
+                //     }
+                //     else
+                //     {
+                //         MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Excess: {-item.Value}");
+                //     }
+                // }
             }
             catch (Exception ex)
             {
@@ -1446,7 +1446,7 @@ namespace CargoSorter
                 // Nothing to do with this item, we have exactly enough
                 if (item.Value == 0)
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} 0 items");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} 0 items");
                     workData.ItemAvailableAssemblers.Add(item.Key, null);
                     continue;
                 }
@@ -1461,7 +1461,7 @@ namespace CargoSorter
                         {
                             if (quotaItem.Flag == RequestFlags.Minimum)
                             {
-                                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is minimum and item is over required");
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is minimum and item is over required");
                                 workData.ItemAvailableAssemblers.Add(item.Key, null);
                                 itemSatisfied = true;
                             }
@@ -1475,12 +1475,12 @@ namespace CargoSorter
                         continue;
                     }
 
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for disassemblers for {item.Key}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for disassemblers for {item.Key}");
                     foreach (var assembler in workData.GroupAssemblers)
                     {
                         if (assembler.AllowDisassembly)
                         {
-                            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found disassembler {assembler.Block.DisplayNameText}");
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found disassembler {assembler.Block.DisplayNameText}");
                             MyBlueprintDefinitionBase bluePrintDef;
                             if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(item.Key, out bluePrintDef))
                             {
@@ -1491,7 +1491,7 @@ namespace CargoSorter
                                     workData.MarkedForDisassembly.Add(assembler.Block);
                                     workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
                                     itemSatisfied = true;
-                                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.DisplayNameText} for disassembly");
+                                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.DisplayNameText} for disassembly");
                                 }
                             }
                         }
@@ -1505,7 +1505,7 @@ namespace CargoSorter
                         {
                             if (quotaItem.Flag == RequestFlags.Limit)
                             {
-                                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is limit and item is under limit");
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is limit and item is under limit");
                                 workData.ItemAvailableAssemblers.Add(item.Key, null);
                                 itemSatisfied = true;
                             }
@@ -1519,7 +1519,7 @@ namespace CargoSorter
                         continue;
                     }
 
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for assemblers for {item.Key}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for assemblers for {item.Key}");
                     foreach (var assembler in workData.GroupAssemblers)
                     {
                         if (assembler.AllowAssembly && !workData.MarkedForDisassembly.Contains(assembler.Block))
@@ -1569,7 +1569,7 @@ namespace CargoSorter
 
                     if (removeMissing)
                     {
-                        MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} from MissingItems");
+                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} from MissingItems");
                         workData.MissingItems.Remove(item.Key);
                     }
 
@@ -1594,7 +1594,7 @@ namespace CargoSorter
 
         private void GatherQuotaAndAssemblers(IEnumerable<IMyTerminalBlock> blocks, QuotaManagerWorkData workData)
         {
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: getting all assemblers for assembler group {workData.QuotaInfo.GroupName}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: getting all assemblers for assembler group {workData.QuotaInfo.GroupName}");
             foreach (var block in blocks)
             {
                 if (!Util.IsValid(block) || block.InventoryCount == 0 || !block.HasLocalPlayerAccess() || IsIgnored(block))
@@ -1659,7 +1659,7 @@ namespace CargoSorter
                 }
             }
 
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found {workData.GroupAssemblers.Count} assemblers for {workData.QuotaInfo.GroupName}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found {workData.GroupAssemblers.Count} assemblers for {workData.QuotaInfo.GroupName}");
         }
 
         private void SetProductionQuotasCallback(WorkData data)
@@ -1685,21 +1685,21 @@ namespace CargoSorter
 
                 if (remainingToQueue == MyFixedPoint.Zero)
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - 0 items");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - 0 items");
                     continue;
                 }
 
                 var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(quotaItem.ItemId, null);
                 if (availableAssemblers == null)
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no available assemblers");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no available assemblers");
                     continue;
                 }
 
                 var blueprint = MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(quotaItem.ItemId);
                 if (blueprint == null)
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no blueprint");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no blueprint");
                     continue;
                 }
 
@@ -1745,7 +1745,7 @@ namespace CargoSorter
                     }
 
                     // Get the absolute quota amount here as it will be negative if this is a disassembly operation
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: remaining: {(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue)} Weighted: {MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount))}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: remaining: {(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue)} Weighted: {MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount))}");
                     var assignedAmount = MyFixedPoint.Min(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue, MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount)));
                     // Validity checked from the check during total weight determination
                     if (!assembler.Block.IsQueueEmpty)
@@ -1791,7 +1791,7 @@ namespace CargoSorter
                         assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly;
                     }
 
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
                     assembler.Block.InsertQueueItem(0, blueprint, assignedAmount);
                     // Reverse the absolute so that we "add" items to negative values
                     remainingToQueue -= remainingToQueue >= MyFixedPoint.Zero ? assignedAmount : -assignedAmount;

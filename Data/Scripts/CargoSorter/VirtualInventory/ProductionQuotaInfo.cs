@@ -57,13 +57,13 @@ namespace CargoSorter
             var result = new AssemblerQuotaInfo(block);
             if (!iniParser.TryParse(block.CustomData))
             {
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota Options config");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota Options config");
                 return result;
             }
 
             if (IsCustomDataEmpty(block.CustomData) || !iniParser.ContainsSection(OptionsSectionName))
             {
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} using default Quota Options config");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} using default Quota Options config");
                 return result;
             }
 
@@ -83,7 +83,7 @@ namespace CargoSorter
 
             if (IsCustomDataEmpty(block.CustomData) || !iniParser.TryParse(block.CustomData))
             {
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config");
                 RequestStatus |= RequestValidationStatus.InvalidCustomData;
                 return;
             }
@@ -95,7 +95,7 @@ namespace CargoSorter
                 QuotaItems = new List<AssemblerQuotaItem>();
             }
 
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} has {iniKeys.Count}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} has {iniKeys.Count}");
             foreach (var iniKey in iniKeys)
             {
                 if (iniKey.IsEmpty)
@@ -110,11 +110,11 @@ namespace CargoSorter
                 }
 
                 var value = iniParser.Get(iniKey);
-                MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
                 if (string.IsNullOrWhiteSpace(valueString))
                 {
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} key {iniKey.Name} has an empty value, skipping");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} key {iniKey.Name} has an empty value, skipping");
                     continue;
                 }
                 else
