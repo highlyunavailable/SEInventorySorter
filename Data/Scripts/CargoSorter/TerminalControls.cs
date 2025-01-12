@@ -20,9 +20,12 @@ namespace CargoSorter
             }
             Done = true;
 
-            // these are all the options and they're not all required so use only what you need.
-            CreateControls();
-            CreateActions();
+            MyAPIGateway.Utilities.InvokeOnGameThread(() =>
+            {
+                // these are all the options and they're not all required so use only what you need.
+                CreateControls();
+                CreateActions();
+            });
         }
 
         private static bool IsControlVisible(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyShipController;
