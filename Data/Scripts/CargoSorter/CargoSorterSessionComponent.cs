@@ -1635,6 +1635,12 @@ namespace CargoSorter
 
                         gatherInventoryContents = true;
                     }
+
+                    // Add all coop assembler inventories as they'll pull stuff anyway.
+                    if (assembler.CooperativeMode)
+                    {
+                        gatherInventoryContents = true;
+                    }
                 }
                 else
                 {
