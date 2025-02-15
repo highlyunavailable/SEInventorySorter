@@ -24,7 +24,7 @@ namespace CargoSorter
             {
                 CreateControls();
                 CreateActions();
-            });
+            }, StartAt: MyAPIGateway.Session.GameplayFrameCounter + 5);
         }
 
         private static bool IsControlVisible(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyShipController;
