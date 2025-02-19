@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
+using CargoSorter.Data.Scripts.CargoSorter;
 using CoreSystems.Api;
 using ParallelTasks;
 using Sandbox.Definitions;
@@ -2060,16 +2059,43 @@ namespace CargoSorter
 
         private void CustomActionGetter(IMyTerminalBlock block, List<IMyTerminalAction> actions)
         {
-            TerminalControls.DoOnce();
-            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
-            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+            if (block is IMyShipController)
+            {
+
+                ShipControllerTerminalControls.DoOnce();
+                actions.AddRange(ShipControllerTerminalControls.Actions);
+            }
+            else if (block is IMyAssembler)
+            {
+                AssemblerTerminalControls.DoOnce();
+                actions.AddRange(AssemblerTerminalControls.Actions);
+            }
+            else if (block is IMyProjector)
+            {
+
+                ProjectorTerminalControls.DoOnce();
+                actions.AddRange(ProjectorTerminalControls.Actions);
+            }
         }
 
         private void CustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
         {
-            TerminalControls.DoOnce();
-            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
-            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+            if (block is IMyShipController)
+            {
+                ShipControllerTerminalControls.DoOnce();
+                controls.AddRange(ShipControllerTerminalControls.Controls);
+            }
+            else if (block is IMyAssembler)
+            {
+                AssemblerTerminalControls.DoOnce();
+                controls.AddRange(AssemblerTerminalControls.Controls);
+            }
+            else if (block is IMyProjector)
+            {
+
+                ProjectorTerminalControls.DoOnce();
+                controls.AddRange(ProjectorTerminalControls.Controls);
+            }
         }
 
         private string BuildAllSortableItemNamesString()
