@@ -26,6 +26,7 @@ namespace CargoSorter
         public static CargoSorterSessionComponent Instance { get; private set; }
         public CargoSorterConfiguration Config { get; private set; }
 
+
         private readonly HashSet<MyDefinitionId> allOres = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allIngots = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allComponents = new HashSet<MyDefinitionId>();
@@ -1678,10 +1679,11 @@ namespace CargoSorter
 
         private void ExecuteQueueChanges(QuotaManagerWorkData workData)
         {
+            if (workData.QuotaInfo.QuotaItems == null) { return; }
+
             // Iterate by QuotaItems so the priority order is preserved
             // Reversed so that we can add to the first index every time and push other items back in queue
             // and the highest priority is done last and therefore ends up being first.
-
             for (int qi = workData.QuotaInfo.QuotaItems.Count - 1; qi >= 0; qi--)
             {
                 var quotaItem = workData.QuotaInfo.QuotaItems[qi];
@@ -1814,7 +1816,7 @@ namespace CargoSorter
             switch (workData.ResultsType)
             {
                 case ResultsDisplayType.Chat:
-                    if (Config.ShowProgressNotifications)
+                    if (Config.ShowProgressNotifications && workData.QuotaInfo.RequestStatus == RequestValidationStatus.Valid)
                     {
                         if (workData.MissingItems.Count == 0)
                         {
@@ -1885,7 +1887,7 @@ namespace CargoSorter
 
                         if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
-                            warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as an inventory request. Clear the block's Custom Data and set it up again or remove the Limited/Special tag.");
+                            warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as a quota request. Check the block's custom data to make sure the data is a valid quota request.");
                         }
                         else if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidItem) || workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCount))
                         {
@@ -1982,42 +1984,39 @@ namespace CargoSorter
                     {
                         displayStringBuilder.Append("No quota changes needed.");
                     }
-                    else
+                    displayStringBuilder.AppendLine();
+                    displayStringBuilder.AppendLine();
+                    if (warningsBuilder != null)
                     {
+                        displayStringBuilder.AppendLine("Warnings:");
+                        displayStringBuilder.AppendStringBuilder(warningsBuilder);
                         displayStringBuilder.AppendLine();
                         displayStringBuilder.AppendLine();
-                        if (warningsBuilder != null)
-                        {
-                            displayStringBuilder.AppendLine("Warnings:");
-                            displayStringBuilder.AppendStringBuilder(warningsBuilder);
-                            displayStringBuilder.AppendLine();
-                            displayStringBuilder.AppendLine();
-                        }
-
-                        if (groups.Count > 0)
-                        {
-                            displayStringBuilder.AppendLine("Items:");
-                            foreach (var group in groups.OrderBy(g => g.Key))
-                            {
-                                displayStringBuilder.AppendFormat("{0}:\n", group.Key);
-                                foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
-                                {
-                                    if (subTypeValue.Value > 0)
-                                    {
-                                        displayStringBuilder.AppendFormat("{0}: {1} missing\n", subTypeValue.Key, MyFixedPoint.Ceiling(subTypeValue.Value));
-                                    }
-                                    else
-                                    {
-                                        displayStringBuilder.AppendFormat("{0}: {1} excess\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
-                                    }
-                                }
-
-                                displayStringBuilder.AppendLine();
-                            }
-                        }
-
-                        Util.TrimTrailingWhitespace(displayStringBuilder);
                     }
+
+                    if (groups.Count > 0)
+                    {
+                        displayStringBuilder.AppendLine("Items:");
+                        foreach (var group in groups.OrderBy(g => g.Key))
+                        {
+                            displayStringBuilder.AppendFormat("{0}:\n", group.Key);
+                            foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
+                            {
+                                if (subTypeValue.Value > 0)
+                                {
+                                    displayStringBuilder.AppendFormat("{0}: {1} missing\n", subTypeValue.Key, MyFixedPoint.Ceiling(subTypeValue.Value));
+                                }
+                                else
+                                {
+                                    displayStringBuilder.AppendFormat("{0}: {1} excess\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                }
+                            }
+
+                            displayStringBuilder.AppendLine();
+                        }
+                    }
+
+                    Util.TrimTrailingWhitespace(displayStringBuilder);
 
                     var stringToShow = "Quota Check Complete";
 
@@ -2103,45 +2102,44 @@ namespace CargoSorter
             var sbMap = new StringBuilder();
             var sbInv = new StringBuilder();
             Dictionary<MyDefinitionId, MyFixedPoint> itemIdsForCustomData = new Dictionary<MyDefinitionId, MyFixedPoint>();
-            sbMap.AppendLine("Sortable Items:");
-            sbMap.AppendLine("Sortable ID = Display Name");
+            sbMap.AppendLine("Sortable Items ([Sortable ID] is [Display Name]) - scroll down for inventory format");
             foreach (var item in MakeSortedIdDefs(allOres))
             {
-                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
 
             foreach (var item in MakeSortedIdDefs(allIngots))
             {
-                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
 
             foreach (var item in MakeSortedIdDefs(allComponents))
             {
-                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
 
             foreach (var item in MakeSortedIdDefs(allAmmo))
             {
-                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
 
             foreach (var item in MakeSortedIdDefs(allTools))
             {
-                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
 
             foreach (var item in MakeSortedIdDefs(allBottles))
             {
-                sbMap.AppendFormat("{0} = {1}\n", item.Key, item.Value);
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
             }
 
-            sbMap.AppendLine().AppendLine("Inventory Custom Data format:");
+            sbMap.AppendLine().AppendLine("Inventory/Quota Custom Data format:");
             sbMap.AppendLine("[Inventory]");
             sbMap.AppendStringBuilder(sbInv);
             return sbMap.ToString();

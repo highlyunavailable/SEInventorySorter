@@ -58,6 +58,23 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 Actions.Add(action);
             }
             {
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
+                control.Title = MyStringId.GetOrCompute("Clear Queue");
+                control.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
+                control.SupportsMultipleBlocks = true;
+                control.Action = ClearAssemblerQueueItems;
+                Controls.Add(control);
+            }
+            {
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_BuildToQuotaButton");
+                control.Title = MyStringId.GetOrCompute("Build to Quota");
+                control.Tooltip = MyStringId.GetOrCompute("Queue up items to match production quotas. Must be a primary group assembler and have quota data.");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasQuotaCustomData;
+                control.Action = StartQuotaAction;
+                Controls.Add(control);
+            }
+            {
                 var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GeneratePrerequisiteCustomDataFromQueueButton");
                 control.Title = MyStringId.GetOrCompute("Make Prerequisite Data");
                 control.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data that can be pasted into a Special/Limited container to fill it with the prerequisites for this assembler's queue");
@@ -83,23 +100,6 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 control.SupportsMultipleBlocks = false;
                 control.Enabled = CanMakeQueueFromCustomData;
                 control.Action = QueueFromCustomDataAction;
-                Controls.Add(control);
-            }
-            {
-                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
-                control.Title = MyStringId.GetOrCompute("Clear Queue");
-                control.Tooltip = MyStringId.GetOrCompute("Clears the queues of the selected assemblers");
-                control.SupportsMultipleBlocks = true;
-                control.Action = ClearAssemblerQueueItems;
-                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
-            }
-            {
-                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_BuildToQuotaButton");
-                control.Title = MyStringId.GetOrCompute("Build to Quota");
-                control.Tooltip = MyStringId.GetOrCompute("Queue up items to match production quotas. Must be a primary group assembler and have quota data.");
-                control.SupportsMultipleBlocks = false;
-                control.Enabled = HasQuotaCustomData;
-                control.Action = StartQuotaAction;
                 Controls.Add(control);
             }
 

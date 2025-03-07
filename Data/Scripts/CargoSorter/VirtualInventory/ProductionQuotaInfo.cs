@@ -83,7 +83,7 @@ namespace CargoSorter
 
             if (IsCustomDataEmpty(block.CustomData) || !iniParser.TryParse(block.CustomData))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config");
+                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config");
                 RequestStatus |= RequestValidationStatus.InvalidCustomData;
                 return;
             }
