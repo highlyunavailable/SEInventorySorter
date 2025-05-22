@@ -28,6 +28,7 @@ namespace CargoSorter
         public readonly MyInventoryConstraint Constraint;
         public readonly MyInventory RealInventory;
         public readonly IMyCubeBlock Block;
+        public readonly MyIniParseResult ConfigParseResult;
 
         public InventoryInfo(MyInventory realInventory, string profile)
         {
@@ -59,7 +60,7 @@ namespace CargoSorter
             if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
-                ParseCustomDataRequests(this, null);
+                ConfigParseResult = ParseCustomDataRequests(this, null);
             }
             else
             {
@@ -97,14 +98,14 @@ namespace CargoSorter
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
-                    ParseCustomDataRequests(this, null);
+                    ConfigParseResult = ParseCustomDataRequests(this, null);
                 }
             }
             if (!string.IsNullOrEmpty(profile) && Block.DisplayNameText.InsensitiveContains(profile))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort ({profile}): {Block.DisplayNameText}");
                 TypeRequests = TypeRequests.Special;
-                ParseCustomDataRequests(this, profile);
+                ConfigParseResult = ParseCustomDataRequests(this, profile);
             }
 
             if (Requests != null && Requests.Count > 0)
@@ -158,7 +159,7 @@ namespace CargoSorter
                         if (assemberBlock.CustomData.Contains("[Inventory]"))
                         {
                             Requests = new Dictionary<MyDefinitionId, RequestData>();
-                            ParseCustomDataRequests(this, null);
+                            ConfigParseResult = ParseCustomDataRequests(this, null);
                         }
                     }
                 }
@@ -213,19 +214,20 @@ namespace CargoSorter
             return sumVolume <= maxVolume;
         }
 
-        private void ParseCustomDataRequests(InventoryInfo inventoryInfo, string profile)
+        private MyIniParseResult ParseCustomDataRequests(InventoryInfo inventoryInfo, string profile)
         {
+            MyIniParseResult quotaParseResult = new MyIniParseResult();
             var terminalBlock = inventoryInfo.Block as IMyTerminalBlock;
             if (!Util.IsValid(terminalBlock))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} isn't a terminal block");
-                return;
+                return quotaParseResult;
             }
             iniParser.Clear();
 
             var sectionName = string.IsNullOrEmpty(profile) ? "Inventory" : $"Inventory:{profile}";
 
-            if (!iniParser.TryParse(terminalBlock.CustomData))
+            if (!iniParser.TryParse(terminalBlock.CustomData, out quotaParseResult))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
                 if (IsCustomDataEmpty(terminalBlock.CustomData))
@@ -235,7 +237,7 @@ namespace CargoSorter
                 else
                 {
                     inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidCustomData;
-                    return;
+                    return quotaParseResult;
                 }
             }
 
@@ -314,6 +316,7 @@ namespace CargoSorter
             }
 
             iniParser.Clear();
+            return quotaParseResult;
         }
 
         private bool IsCustomDataEmpty(string customData)

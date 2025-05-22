@@ -103,7 +103,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 Controls.Add(control);
             }
 
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Added assembler controls: Done: {Done}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Added assembler controls: Done: {Done}");
         }
 
         private static bool HasQueueReady(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyAssembler)?.IsQueueEmpty == false;

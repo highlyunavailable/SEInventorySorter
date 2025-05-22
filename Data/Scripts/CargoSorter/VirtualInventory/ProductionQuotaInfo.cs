@@ -26,6 +26,7 @@ namespace CargoSorter
         public RequestValidationStatus RequestStatus;
         public List<AssemblerQuotaItem> QuotaItems;
         public readonly string GroupName;
+        public readonly MyIniParseResult ConfigParseResult;
         public ProductionQuotaInfo(IMyAssembler block)
         {
             // Check to see if the block even has quota data. If it doesn't, there's nothing to do!
@@ -47,7 +48,7 @@ namespace CargoSorter
                 }
             }
 
-            ParseQuota(block);
+            ConfigParseResult = ParseQuota(block);
         }
 
         public static AssemblerQuotaInfo ParseQuotaOptions(IMyAssembler block)
@@ -73,19 +74,19 @@ namespace CargoSorter
             if (!iniParser.Get(OptionsSectionName, "AllowDisassembly").TryGetBoolean(out result.AllowDisassembly)) { result.AllowDisassembly = false; }
             if (!iniParser.Get(OptionsSectionName, "ClearQueue").TryGetBoolean(out result.ClearQueue)) { result.ClearQueue = true; }
 
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} Quota Options config: AllowAssembly: {result.AllowAssembly}, AllowDisassembly: {result.AllowDisassembly}, ClearQueue: {result.ClearQueue}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} Quota Options config: AllowAssembly: {result.AllowAssembly}, AllowDisassembly: {result.AllowDisassembly}, ClearQueue: {result.ClearQueue}");
             return result;
         }
 
-        private void ParseQuota(IMyAssembler block)
+        private MyIniParseResult ParseQuota(IMyAssembler block)
         {
+            MyIniParseResult quotaParseResult = new MyIniParseResult();
             iniParser.Clear();
-
-            if (IsCustomDataEmpty(block.CustomData) || !iniParser.TryParse(block.CustomData))
+            if (IsCustomDataEmpty(block.CustomData) || !iniParser.TryParse(block.CustomData, out quotaParseResult))
             {
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config:\n{quotaParseResult.Error}");
                 RequestStatus |= RequestValidationStatus.InvalidCustomData;
-                return;
+                return quotaParseResult;
             }
             List<MyIniKey> iniKeys = new List<MyIniKey>();
             iniParser.GetKeys(QuotaSectionName, iniKeys);
@@ -141,6 +142,7 @@ namespace CargoSorter
             }
 
             iniParser.Clear();
+            return quotaParseResult;
         }
 
         private static bool IsCustomDataEmpty(string customData)

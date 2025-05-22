@@ -70,42 +70,42 @@ namespace CargoSorter
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
-                    allVolumes.Add(definition.Id, definition.Volume);
+                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Ore");
                 }
 
                 if (definition.IsIngot)
                 {
                     allIngots.Add(definition.Id);
-                    allVolumes.Add(definition.Id, definition.Volume);
+                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Ingot");
                 }
 
                 if (definition is MyUsableItemDefinition || definition is MyDatapadDefinition || definition is MyPackageDefinition || definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
                 {
                     allTools.Add(definition.Id);
-                    allVolumes.Add(definition.Id, definition.Volume);
+                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Item");
                 }
 
                 if (definition is MyOxygenContainerDefinition)
                 {
                     allBottles.Add(definition.Id);
-                    allVolumes.Add(definition.Id, definition.Volume);
+                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Bottle");
                 }
 
                 if (definition is MyComponentDefinition)
                 {
                     allComponents.Add(definition.Id);
-                    allVolumes.Add(definition.Id, definition.Volume);
+                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Component");
                 }
 
                 if (definition is MyAmmoMagazineDefinition)
                 {
                     allAmmo.Add(definition.Id);
-                    allVolumes.Add(definition.Id, definition.Volume);
+                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Ammo");
                 }
             }
@@ -122,7 +122,7 @@ namespace CargoSorter
                 {
                     MakeNormalizedId(handPhysicalItem.Id, "Tool");
                     allTools.Add(handPhysicalItem.Id);
-                    allVolumes.Add(handPhysicalItem.Id, handPhysicalItem.Volume);
+                    allVolumes[handPhysicalItem.Id] = handPhysicalItem.Volume;
                 }
             }
 
@@ -178,10 +178,7 @@ namespace CargoSorter
                 var normalizedFriendlyId = $"{friendlyType}/{definitionId.SubtypeName}".ToLowerInvariant();
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Adding friendly type {normalizedFriendlyId} -> {definition.Id}");
                 stringPhysicalItemMap[normalizedFriendlyId] = definitionId;
-                if (!friendlyTypeNames.ContainsKey(definitionId.TypeId))
-                {
-                    friendlyTypeNames.Add(definitionId.TypeId, friendlyType);
-                }
+                friendlyTypeNames[definitionId.TypeId] = friendlyType;
                 //else
                 //{
                 //    if (friendlyTypeNames[definition.Id.TypeId] != friendlyType)
@@ -1098,7 +1095,7 @@ namespace CargoSorter
 
         private void DisplaySortResults(CargoSorterWorkData workData, int transferRequestCount)
         {
-            var validationFailedBlocks = new Dictionary<IMyCubeBlock, RequestValidationStatus>();
+            var validationFailedBlocks = new Dictionary<IMyCubeBlock, ValueTuple<RequestValidationStatus, MyIniParseResult>>();
             foreach (var inventory in workData.Inventories)
             {
                 if (inventory.RequestStatus == RequestValidationStatus.Valid || !Util.IsValid(inventory.Block))
@@ -1106,7 +1103,7 @@ namespace CargoSorter
                     continue;
                 }
 
-                validationFailedBlocks[inventory.Block] = inventory.RequestStatus;
+                validationFailedBlocks[inventory.Block] = new ValueTuple<RequestValidationStatus, MyIniParseResult>(inventory.RequestStatus, inventory.ConfigParseResult);
             }
 
             switch (workData.ResultsType)
@@ -1126,16 +1123,16 @@ namespace CargoSorter
 
                     foreach (var failedBlock in validationFailedBlocks)
                     {
-                        if (failedBlock.Value.HasFlag(RequestValidationStatus.TooMuchVolume))
+                        if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.TooMuchVolume))
                         {
                             MyAPIGateway.Utilities.ShowMessage("Sorter", $"Warning: Requested items on '{failedBlock.Key.DisplayNameText}' will not fit!");
                         }
 
-                        if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCustomData))
+                        if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{failedBlock.Key.DisplayNameText}'");
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{failedBlock.Key.DisplayNameText}': {failedBlock.Value.Item2.Error}");
                         }
-                        else if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCount))
+                        else if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidCount))
                         {
                             var ini = new MyIni();
                             var terminalBlock = failedBlock.Key as IMyTerminalBlock;
@@ -1208,16 +1205,16 @@ namespace CargoSorter
                         {
                             warningsBuilder.AppendFormat("{0}:\n", failedBlock.Key.DisplayNameText);
 
-                            if (failedBlock.Value.HasFlag(RequestValidationStatus.TooMuchVolume))
+                            if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.TooMuchVolume))
                             {
                                 warningsBuilder.AppendLine("The block's Custom Data requests more items than can possibly fit in its inventory. Reduce the number of items desired or move the Custom Data, tag and priority to a block with more inventory space.");
                             }
 
-                            if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCustomData))
+                            if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidCustomData))
                             {
-                                warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as an inventory request. Clear the block's Custom Data and set it up again or remove the Limited/Special tag.");
+                                warningsBuilder.AppendLine($"The block's Custom Data was not able to be interpreted as an inventory request. Clear the block's Custom Data and set it up again or remove the Limited/Special tag: {failedBlock.Value.Item2.Error}");
                             }
-                            else if (failedBlock.Value.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.HasFlag(RequestValidationStatus.InvalidCount))
+                            else if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidCount))
                             {
                                 warningsBuilder.AppendLine("These lines in the block's Custom Data are not valid:");
                                 var ini = new MyIni();
@@ -1832,7 +1829,7 @@ namespace CargoSorter
                     {
                         if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on assembler '{workData.Block.DisplayNameText}'");
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on assembler '{workData.Block.DisplayNameText}': {workData.QuotaInfo.ConfigParseResult.Error}");
                         }
 
                         else if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidItem) || workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCount))
@@ -1887,7 +1884,7 @@ namespace CargoSorter
 
                         if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
-                            warningsBuilder.AppendLine("The block's Custom Data was not able to be interpreted as a quota request. Check the block's custom data to make sure the data is a valid quota request.");
+                            warningsBuilder.AppendLine($"The block's Custom Data was not able to be interpreted as a quota request: {workData.QuotaInfo.ConfigParseResult.Error}");
                         }
                         else if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidItem) || workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCount))
                         {

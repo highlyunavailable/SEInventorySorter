@@ -38,7 +38,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 control.Action = GenerateCustomDataFromProjectionAction;
                 Controls.Add(control);
             }
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Added projector controls: Done: {Done}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Added projector controls: Done: {Done}");
         }
         public static bool HasProjectedGrid(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyProjector)?.ProjectedGrid != null;
         private static void GenerateCustomDataFromProjectionAction(IMyTerminalBlock block)

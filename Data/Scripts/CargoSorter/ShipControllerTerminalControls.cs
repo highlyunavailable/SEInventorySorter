@@ -56,7 +56,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 Controls.Add(control);
             }
 
-            MyLog.Default.WriteLineAndConsole($"CargoSort: Added ship controller controls: Done: {Done}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Added ship controller controls: Done: {Done}");
         }
 
         public static bool IsControlVisible(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyShipController;
