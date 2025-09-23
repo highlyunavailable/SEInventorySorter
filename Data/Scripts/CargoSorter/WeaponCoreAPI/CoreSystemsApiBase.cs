@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using VRage;
 using VRage.Collections;
@@ -11,7 +12,7 @@ using VRageMath;
 namespace CoreSystems.Api
 {
     /// <summary>
-    /// https://github.com/sstixrud/CoreSystems/blob/master/BaseData/Scripts/CoreSystems/Api/CoreSystemsApiBase.cs
+    /// https://github.com/Ash-LikeSnow/WeaponCore/blob/master/Data/Scripts/CoreSystems/Api/CoreSystemsApiBase.cs
     /// </summary>
     public partial class WcApi
     {
@@ -57,6 +58,8 @@ namespace CoreSystems.Api
         private Func<MyEntity, long> _getPlayerController;
         private Func<MyEntity, MyTuple<bool, int, int>> _getProjectilesLockedOn;
         private Action<MyEntity, ICollection<Vector3D>> _getProjectilesLockedOnPos;
+        private Action<ICollection<MyTuple<ulong, Vector3D, int, long>>> _getAllSmartProjectiles;
+
         private Func<MyDefinitionId, float> _getMaxPower;
 
         private Func<MyEntity, float> _getOptimalDps;
@@ -87,10 +90,14 @@ namespace CoreSystems.Api
         private Func<MyEntity, int, bool> _isWeaponShooting;
         private Func<MyEntity, int, int> _getShotsFired;
         private Action<MyEntity, int, List<MyTuple<Vector3D, Vector3D, Vector3D, Vector3D, MatrixD, MatrixD>>> _getMuzzleInfo;
+        private Action<MyEntity, int, List<MyTuple<MyEntity, MatrixD>>> _getMuzzleParentEntity;
         private Func<MyEntity, int, MyTuple<Vector3D, Vector3D>> _getWeaponScope;
         private Func<MyEntity, int, MyTuple<MyDefinitionId, string, string, bool>> _getMagazineMap;
         private Func<MyEntity, int, MyDefinitionId, bool, bool> _setMagazine;
         private Func<MyEntity, int, bool> _forceReload;
+        private Action<Action<MyCubeGrid, BoundingSphereD, List<MyEntity>>> _addScanTargetsAction;
+        private Action<Action<MyCubeGrid, BoundingSphereD, List<MyEntity>>> _removeScanTargetsAction;
+        private Action<Func<IMyTerminalBlock, int, MyEntity, bool>> _setValidateWeaponTargetFunc;
 
         public void SetWeaponTarget(MyEntity weapon, MyEntity target, int weaponId = 0) =>
             _setWeaponTarget?.Invoke(weapon, target, weaponId);
@@ -174,6 +181,11 @@ namespace CoreSystems.Api
         /// </summary>
         public void GetProjectilesLockedOnPos(MyEntity victim, ICollection<Vector3D> collection) =>
             _getProjectilesLockedOnPos?.Invoke(victim, collection);
+        /// <summary>
+        /// Returns a collection of all smart projectiles with ID, position, age, and faction ID
+        /// </summary>
+        public void GetAllSmartProjectiles(ICollection<MyTuple<ulong, Vector3D, int, long>> collection) =>
+            _getAllSmartProjectiles?.Invoke(collection);
         public void GetSortedThreats(MyEntity shooter, ICollection<MyTuple<MyEntity, float>> collection) =>
             _getSortedThreats?.Invoke(shooter, collection);
         public void GetObstructions(MyEntity shooter, ICollection<MyEntity> collection) =>
@@ -219,7 +231,7 @@ namespace CoreSystems.Api
             _setProjectileState?.Invoke(projectileId, values);
 
         /// <summary>
-        /// Gets whether the weapon is shooting, used by Hakerman's Beam Logic
+        /// Gets whether the weapon is shooting, used by ANPaL Beam Logic
         /// Unexpected behavior may occur when using this method
         /// </summary>
         /// <param name="weaponBlock"></param>
@@ -228,7 +240,7 @@ namespace CoreSystems.Api
         internal bool IsWeaponShooting(MyEntity weaponBlock, int weaponId) => _isWeaponShooting?.Invoke(weaponBlock, weaponId) ?? false;
 
         /// <summary>
-        /// Gets how many shots the weapon fired, used by Hakerman's Beam Logic
+        /// Gets how many shots the weapon fired, used by ANPaL Beam Logic
         /// Unexpected behavior may occur when using this method
         /// </summary>
         /// <param name="weaponBlock"></param>
@@ -237,7 +249,7 @@ namespace CoreSystems.Api
         internal int GetShotsFired(MyEntity weaponBlock, int weaponId) => _getShotsFired?.Invoke(weaponBlock, weaponId) ?? -1;
 
         /// <summary>
-        /// Gets the info of the weapon's all muzzles, used by Hakerman's Beam Logic
+        /// Gets the info of weapon's all muzzles, used by ANPaL Beam Logic
         /// returns: A list that contains every muzzle's Position, LocalPosition, Direction, UpDirection, ParentMatrix, DummyMatrix
         /// Unexpected behavior may occur when using this method
         /// </summary>
@@ -246,6 +258,18 @@ namespace CoreSystems.Api
         /// <returns></returns>
         internal void GetMuzzleInfo(MyEntity weaponBlock, int weaponId, List<MyTuple<Vector3D, Vector3D, Vector3D, Vector3D, MatrixD, MatrixD>> output) =>
             _getMuzzleInfo?.Invoke(weaponBlock, weaponId, output);
+
+
+        /// <summary>
+        /// Gets parent subpart for weapon's all muzzles, used by ANPaL Beam Logic
+        /// returns: A list contains every muzzle's parent subpart and dummy offset
+        /// Unexpected behavior may occur when using this method
+        /// </summary>
+        /// <param name="weaponBlock"></param>
+        /// <param name="weaponId"></param>
+        /// <returns></returns>
+        internal void GetMuzzleParentEntity(MyEntity weaponBlock, int weaponId, List<MyTuple<MyEntity, MatrixD>> output) =>
+            _getMuzzleParentEntity?.Invoke(weaponBlock, weaponId, output);
 
         /// <summary>
         /// Entity can be a weapon or a grid/player (enables on all subgrids as well)
@@ -467,6 +491,25 @@ namespace CoreSystems.Api
 
         }
 
+        /// <summary>
+        /// Registers an action that tells a given grid's AI available target entities in a given sphere. NOT NETWORKED - make sure this is synced in your mod.
+        /// </summary>
+        /// <param name="action"></param>
+        public void AddScanTargetsAction(Action<MyCubeGrid, BoundingSphereD, List<MyEntity>> action) => _addScanTargetsAction?.Invoke(action);
+
+        /// <summary>
+        /// Unregisters an action that tells a given grid's AI available target entities in a given sphere. NOT NETWORKED - make sure this is synced in your mod.
+        /// </summary>
+        /// <param name="action"></param>
+        public void RemoveScanTargetsAction(Action<MyCubeGrid, BoundingSphereD, List<MyEntity>> action) => _removeScanTargetsAction?.Invoke(action);
+
+        /// <summary>
+        /// Assigns a function that determines if a given weapon can target a given entity. NOT NETWORKED - make sure this is synced in your mod.
+        /// </summary>
+        /// <param name="func">Block, PartId, target</param>
+        public void SetValidateWeaponTargetFunc(Func<IMyTerminalBlock, int, MyEntity, bool> func) =>
+            _setValidateWeaponTargetFunc?.Invoke(func);
+
         private const long Channel = 67549756549;
         private bool _getWeaponDefinitions;
         private bool _isRegistered;
@@ -551,6 +594,7 @@ namespace CoreSystems.Api
             AssignMethod(delegates, "GetMaxPower", ref _getMaxPower);
             AssignMethod(delegates, "GetProjectilesLockedOnBase", ref _getProjectilesLockedOn);
             AssignMethod(delegates, "GetProjectilesLockedOnPos", ref _getProjectilesLockedOnPos);
+            AssignMethod(delegates, "GetAllSmartProjectiles", ref _getAllSmartProjectiles);
             AssignMethod(delegates, "GetAiFocusBase", ref _getAiFocus);
             AssignMethod(delegates, "SetAiFocusBase", ref _setAiFocus);
             AssignMethod(delegates, "ReleaseAiFocusBase", ref _releaseAiFocus);
@@ -605,10 +649,12 @@ namespace CoreSystems.Api
             AssignMethod(delegates, "SpawnPhantom", ref _spawnPhantom);
             AssignMethod(delegates, "SetFocusTarget", ref _setPhantomFocusTarget);
 
-            //Hakerman's Beam Logic
+            //ANPaL Compatibility
             AssignMethod(delegates, "IsWeaponShootingBase", ref _isWeaponShooting);
             AssignMethod(delegates, "GetShotsFiredBase", ref _getShotsFired);
             AssignMethod(delegates, "GetMuzzleInfoBase", ref _getMuzzleInfo);
+            AssignMethod(delegates, "GetMuzzleParentEntityBase", ref _getMuzzleParentEntity);
+
             AssignMethod(delegates, "ToggleInfiniteAmmoBase", ref _toggoleInfiniteResources);
             AssignMethod(delegates, "RegisterEventMonitor", ref _monitorEvents);
             AssignMethod(delegates, "UnRegisterEventMonitor", ref _unmonitorEvents);
@@ -616,6 +662,10 @@ namespace CoreSystems.Api
 
             AssignMethod(delegates, "SetMagazine", ref _setMagazine);
             AssignMethod(delegates, "ForceReload", ref _forceReload);
+
+            AssignMethod(delegates, "AddScanTargetsAction", ref _addScanTargetsAction);
+            AssignMethod(delegates, "RemoveScanTargetsAction", ref _removeScanTargetsAction);
+            AssignMethod(delegates, "SetValidateWeaponTargetFunc", ref _setValidateWeaponTargetFunc);
 
             // Damage handler
             AssignMethod(delegates, "DamageHandler", ref _registerDamageEvent);

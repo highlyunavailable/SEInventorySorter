@@ -33,6 +33,7 @@ namespace CargoSorter
         private readonly HashSet<MyDefinitionId> allAmmo = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allTools = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allBottles = new HashSet<MyDefinitionId>();
+        private readonly Dictionary<MyDefinitionId, List<MyBlueprintDefinitionBase>> resultToBlueprints = new Dictionary<MyDefinitionId, List<MyBlueprintDefinitionBase>>();
 
         private readonly Dictionary<MyDefinitionId, float> allVolumes = new Dictionary<MyDefinitionId, float>();
         private readonly static Dictionary<MyDefinitionId, bool> blockConveyorSupport = new Dictionary<MyDefinitionId, bool>();
@@ -139,6 +140,38 @@ namespace CargoSorter
             //{
             //    MyLog.Default.WriteLineAndConsole($"CargoSort: Normalized ID {item.Key} -> {item.Value}");
             //}
+
+            // Have to do this because Keen doesn't provide multiple BPs per item in
+            // MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId
+            // so stuff like stone to ingot is not considered normally.
+            foreach (var definition in MyDefinitionManager.Static.GetBlueprintDefinitions())
+            {
+                foreach (var result in definition.Results)
+                {
+                    List<MyBlueprintDefinitionBase> bpList;
+                    if (resultToBlueprints.TryGetValue(result.Id, out bpList))
+                    {
+                        if (!bpList.Contains(definition))
+                        {
+                            bpList.Add(definition);
+                        }
+                    }
+                    else
+                    {
+                        bpList = new List<MyBlueprintDefinitionBase>() { definition };
+                        resultToBlueprints.Add(result.Id, bpList);
+                    }
+                }
+            }
+            // Do we need to sort these by something based on value? Unlikely since vanilla tends to
+            // have 1 recipe per block per result, but sort by fastest for now.
+            foreach (var resultDef in resultToBlueprints)
+            {
+                resultDef.Value.SortNoAlloc((MyBlueprintDefinitionBase x, MyBlueprintDefinitionBase y) =>
+                {
+                    return x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds);
+                });
+            }
         }
 
         public override void BeforeStart()
@@ -229,6 +262,11 @@ namespace CargoSorter
 
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Volume lookup {definitionId} failed");
             return false;
+        }
+
+        public bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions)
+        {
+            return resultToBlueprints.TryGetValue(definitionId, out definitions);
         }
 
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
@@ -367,10 +405,19 @@ namespace CargoSorter
 
             foreach (var request in inventoryInfo.Requests)
             {
-                MyBlueprintDefinitionBase blueprintDefinition;
-                if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(request.Key, out blueprintDefinition))
+                List<MyBlueprintDefinitionBase> blueprintDefinitions;
+                if (Instance.TryGetBlueprintDefinitionsByResultId(request.Key, out blueprintDefinitions))
                 {
-                    assembler.AddQueueItem(blueprintDefinition, request.Value.Amount);
+                    // Find usable blueprint
+                    MyBlueprintDefinitionBase blueprintDefinition = null;
+                    foreach (var blueprint in blueprintDefinitions)
+                    {
+                        if (assembler.CanUseBlueprint(blueprint))
+                        {
+                            assembler.AddQueueItem(blueprintDefinition, request.Value.Amount);
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -1478,17 +1525,22 @@ namespace CargoSorter
                         if (assembler.AllowDisassembly)
                         {
                             //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found disassembler {assembler.Block.DisplayNameText}");
-                            MyBlueprintDefinitionBase bluePrintDef;
-                            if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(item.Key, out bluePrintDef))
+                            List<MyBlueprintDefinitionBase> blueprintDefinitions;
+                            if (Instance.TryGetBlueprintDefinitionsByResultId(item.Key, out blueprintDefinitions))
                             {
-                                if (assembler.Block.CanUseBlueprint(bluePrintDef))
+                                // Find usable blueprint
+                                foreach (var blueprint in blueprintDefinitions)
                                 {
-                                    var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(item.Key, new List<AssemblerQuotaInfo>());
-                                    availableAssemblers.Add(assembler);
-                                    workData.MarkedForDisassembly.Add(assembler.Block);
-                                    workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
-                                    itemSatisfied = true;
-                                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.DisplayNameText} for disassembly");
+                                    if (assembler.Block.CanUseBlueprint(blueprint))
+                                    {
+                                        var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(item.Key, new List<AssemblerQuotaInfo>());
+                                        availableAssemblers.Add(assembler);
+                                        workData.MarkedForDisassembly.Add(assembler.Block);
+                                        workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
+                                        itemSatisfied = true;
+                                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.DisplayNameText} for disassembly");
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -1521,15 +1573,20 @@ namespace CargoSorter
                     {
                         if (assembler.AllowAssembly && !workData.MarkedForDisassembly.Contains(assembler.Block))
                         {
-                            MyBlueprintDefinitionBase bluePrintDef;
-                            if (MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(item.Key, out bluePrintDef))
+                            List<MyBlueprintDefinitionBase> blueprintDefinitions;
+                            if (Instance.TryGetBlueprintDefinitionsByResultId(item.Key, out blueprintDefinitions))
                             {
-                                if (assembler.Block.CanUseBlueprint(bluePrintDef))
+                                // Find usable blueprint
+                                foreach (var blueprint in blueprintDefinitions)
                                 {
-                                    var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(item.Key, new List<AssemblerQuotaInfo>());
-                                    availableAssemblers.Add(assembler);
-                                    workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
-                                    itemSatisfied = true;
+                                    if (assembler.Block.CanUseBlueprint(blueprint))
+                                    {
+                                        var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(item.Key, new List<AssemblerQuotaInfo>());
+                                        availableAssemblers.Add(assembler);
+                                        workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
+                                        itemSatisfied = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -1700,8 +1757,8 @@ namespace CargoSorter
                     continue;
                 }
 
-                var blueprint = MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId(quotaItem.ItemId);
-                if (blueprint == null)
+                List<MyBlueprintDefinitionBase> blueprints;
+                if (!Instance.TryGetBlueprintDefinitionsByResultId(quotaItem.ItemId, out blueprints) || blueprints.Count == 0)
                 {
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no blueprint");
                     continue;
@@ -1711,8 +1768,23 @@ namespace CargoSorter
                 for (int ai = availableAssemblers.Count - 1; ai >= 0; ai--)
                 {
                     var assembler = availableAssemblers[ai];
+
+                    // Find usable blueprint
+                    MyBlueprintDefinitionBase blueprintDefinition = null;
+                    if (Util.IsValid(assembler.Block))
+                    {
+                        foreach (var blueprint in blueprints)
+                        {
+                            if (assembler.Block.CanUseBlueprint(blueprint))
+                            {
+                                blueprintDefinition = blueprint;
+                                break;
+                            }
+                        }
+                    }
+
                     // Last chance to skip if it's been destroyed or something
-                    if (Util.IsValid(assembler.Block) && assembler.Block.CanUseBlueprint(blueprint))
+                    if (blueprintDefinition != null)
                     {
                         totalWeight += assembler.AssemblerWeight;
                         if (!assembler.Block.IsQueueEmpty)
@@ -1722,7 +1794,7 @@ namespace CargoSorter
                             {
                                 var queueItem = queue[i];
                                 var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
-                                if (queuedBlueprint == blueprint)
+                                if (queuedBlueprint == blueprintDefinition)
                                 {
                                     remainingToQueue -= MyFixedPoint.Min(queueItem.Amount, remainingToQueue);
                                 }
@@ -1748,6 +1820,17 @@ namespace CargoSorter
                         assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly;
                     }
 
+                    // Find usable blueprint
+                    MyBlueprintDefinitionBase blueprintDefinition = null;
+                    foreach (var blueprint in blueprints)
+                    {
+                        if (assembler.Block.CanUseBlueprint(blueprint))
+                        {
+                            blueprintDefinition = blueprint;
+                            break;
+                        }
+                    }
+
                     // Get the absolute quota amount here as it will be negative if this is a disassembly operation
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: remaining: {(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue)} Weighted: {MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount))}");
                     var assignedAmount = MyFixedPoint.Min(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue, MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount)));
@@ -1759,7 +1842,7 @@ namespace CargoSorter
                         {
                             var queueItem = queue[i];
                             var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
-                            if (queuedBlueprint == blueprint)
+                            if (queuedBlueprint == blueprintDefinition)
                             {
                                 assignedAmount -= MyFixedPoint.Min(queueItem.Amount, assignedAmount);
                             }
@@ -1796,7 +1879,7 @@ namespace CargoSorter
                     }
 
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
-                    assembler.Block.InsertQueueItem(0, blueprint, assignedAmount);
+                    assembler.Block.InsertQueueItem(0, blueprintDefinition, assignedAmount);
                     // Reverse the absolute so that we "add" items to negative values
                     remainingToQueue -= remainingToQueue >= MyFixedPoint.Zero ? assignedAmount : -assignedAmount;
                     // Out of items to queue, go to next item
