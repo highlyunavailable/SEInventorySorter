@@ -3,7 +3,7 @@
 namespace CargoSorter
 {
     [Flags]
-    public enum TypeRequests : ushort
+    public enum TypeRequests : uint
     {
         Nothing = 0,
         Components = 1,
@@ -12,15 +12,17 @@ namespace CargoSorter
         Ammo = 1 << 4,
         Tools = 1 << 5,
         Bottles = 1 << 6,
-        Limited = 1 << 7,
-        Special = 1 << 8,
-        GasGeneratorOre = 1 << 9,
-        AssemblerIngots = 1 << 10,
-        RefineryOre = 1 << 11,
-        GasTankBottles = 1 << 12,
-        ReactorFuel = 1 << 13,
-        ConsumableAmmo = 1 << 14,
-        SorterItems = 1 << 15,
+        Consumables = 1 << 7,
+        Ingredients = 1 << 8,
+        Limited = 1 << 14,
+        Special = 1 << 15,
+        GasGeneratorOre = 1 << 25,
+        AssemblerIngots = 1 << 26,
+        RefineryOre = 1 << 27,
+        GasTankBottles = 1 << 28,
+        ReactorFuel = 1 << 29,
+        ConsumableAmmo = 1 << 30,
+        SorterItems = (uint)1 << 31,
     }
 
     [Flags]

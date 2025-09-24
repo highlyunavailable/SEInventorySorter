@@ -20,6 +20,8 @@ namespace CargoSorter
         public const string defaultToolContainerKeyword = "Tools";
         public const string defaultAmmoContainerKeyword = "Ammo";
         public const string defaultBottleContainerKeyword = "Bottles";
+        public const string defaultConsumablesContainerKeyword = "Consumables";
+        public const string defaultIngredientsContainerKeyword = "Ingredients";
         public const string defaultAnyContainerKeyword = "Any Item";
         public const string defaultQuotaContainerKeyword = "Cargo";
         public static readonly string[] defaultLockedContainerKeywords = { "Locked", "Hidden", "!manual" };
@@ -32,6 +34,8 @@ namespace CargoSorter
         public string ToolContainerKeyword { get; set; }
         public string AmmoContainerKeyword { get; set; }
         public string BottleContainerKeyword { get; set; }
+        public string ConsumablesContainerKeyword { get; set; }
+        public string IngredientsContainerKeyword { get; set; }
         public string AnyContainerKeyword { get; set; }
         public string QuotaContainerKeyword { get; set; }
         public List<string> LockedContainerKeywords { get; set; }
@@ -122,6 +126,8 @@ namespace CargoSorter
                 !string.IsNullOrWhiteSpace(AmmoContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(ToolContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(BottleContainerKeyword) &&
+                !string.IsNullOrWhiteSpace(ConsumablesContainerKeyword) &&
+                !string.IsNullOrWhiteSpace(IngredientsContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(AnyContainerKeyword) &&
                 !string.IsNullOrWhiteSpace(QuotaContainerKeyword) &&
                 LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
@@ -139,6 +145,8 @@ namespace CargoSorter
             ComponentContainerKeyword = CurrentOrDefault(ComponentContainerKeyword, defaultComponentContainerKeyword);
             ToolContainerKeyword = CurrentOrDefault(ToolContainerKeyword, defaultToolContainerKeyword);
             BottleContainerKeyword = CurrentOrDefault(BottleContainerKeyword, defaultBottleContainerKeyword);
+            ConsumablesContainerKeyword = CurrentOrDefault(ConsumablesContainerKeyword, defaultConsumablesContainerKeyword);
+            IngredientsContainerKeyword = CurrentOrDefault(IngredientsContainerKeyword, defaultIngredientsContainerKeyword);
             AnyContainerKeyword = CurrentOrDefault(AnyContainerKeyword, defaultAnyContainerKeyword);
             QuotaContainerKeyword = CurrentOrDefault(QuotaContainerKeyword, defaultQuotaContainerKeyword);
         }
@@ -153,6 +161,8 @@ namespace CargoSorter
             ComponentContainerKeyword = defaultComponentContainerKeyword;
             ToolContainerKeyword = defaultToolContainerKeyword;
             BottleContainerKeyword = defaultBottleContainerKeyword;
+            ConsumablesContainerKeyword = defaultConsumablesContainerKeyword;
+            IngredientsContainerKeyword = defaultIngredientsContainerKeyword;
             AnyContainerKeyword = defaultAnyContainerKeyword;
             QuotaContainerKeyword = defaultQuotaContainerKeyword;
             LockedContainerKeywords = new List<string>(defaultLockedContainerKeywords);

@@ -66,7 +66,7 @@ namespace CargoSorter
             {
                 if (Block.DisplayNameText.InsensitiveContains(config.AnyContainerKeyword))
                 {
-                    TypeRequests = TypeRequests.Ores | TypeRequests.Ingots | TypeRequests.Components | TypeRequests.Tools | TypeRequests.Ammo | TypeRequests.Bottles;
+                    TypeRequests = TypeRequests.Ores | TypeRequests.Ingots | TypeRequests.Components | TypeRequests.Tools | TypeRequests.Ammo | TypeRequests.Bottles | TypeRequests.Consumables | TypeRequests.Ingredients;
                 }
                 else
                 {
@@ -93,6 +93,14 @@ namespace CargoSorter
                     if (Block.DisplayNameText.InsensitiveContains(config.BottleContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Bottles;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.ConsumablesContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Consumables;
+                    }
+                    if (Block.DisplayNameText.InsensitiveContains(config.IngredientsContainerKeyword))
+                    {
+                        TypeRequests |= TypeRequests.Ingredients;
                     }
                 }
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))

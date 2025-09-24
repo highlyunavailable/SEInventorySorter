@@ -26,14 +26,17 @@ namespace CargoSorter
         public static CargoSorterSessionComponent Instance { get; private set; }
         public CargoSorterConfiguration Config { get; private set; }
 
-
         private readonly HashSet<MyDefinitionId> allOres = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allIngots = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allComponents = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allAmmo = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allTools = new HashSet<MyDefinitionId>();
         private readonly HashSet<MyDefinitionId> allBottles = new HashSet<MyDefinitionId>();
+        private readonly HashSet<MyDefinitionId> allConsumables = new HashSet<MyDefinitionId>();
+        private readonly HashSet<MyDefinitionId> allIngredients = new HashSet<MyDefinitionId>();
         private readonly Dictionary<MyDefinitionId, List<MyBlueprintDefinitionBase>> resultToBlueprints = new Dictionary<MyDefinitionId, List<MyBlueprintDefinitionBase>>();
+
+        private readonly static MyObjectBuilderType seedTypeID = MyObjectBuilderType.Parse("MyObjectBuilder_SeedItem");
 
         private readonly Dictionary<MyDefinitionId, float> allVolumes = new Dictionary<MyDefinitionId, float>();
         private readonly static Dictionary<MyDefinitionId, bool> blockConveyorSupport = new Dictionary<MyDefinitionId, bool>();
@@ -61,6 +64,40 @@ namespace CargoSorter
 
             Instance = this;
 
+
+
+            // Have to do this because Keen doesn't provide multiple BPs per item in
+            // MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId
+            // so stuff like stone to ingot is not considered normally.
+            foreach (var definition in MyDefinitionManager.Static.GetBlueprintDefinitions())
+            {
+                foreach (var result in definition.Results)
+                {
+                    List<MyBlueprintDefinitionBase> bpList;
+                    if (resultToBlueprints.TryGetValue(result.Id, out bpList))
+                    {
+                        if (!bpList.Contains(definition))
+                        {
+                            bpList.Add(definition);
+                        }
+                    }
+                    else
+                    {
+                        bpList = new List<MyBlueprintDefinitionBase>() { definition };
+                        resultToBlueprints.Add(result.Id, bpList);
+                    }
+                }
+            }
+            // Do we need to sort these by something based on value? Unlikely since vanilla tends to
+            // have 1 recipe per block per result, but sort by fastest for now.
+            foreach (var resultDef in resultToBlueprints)
+            {
+                resultDef.Value.SortNoAlloc((MyBlueprintDefinitionBase x, MyBlueprintDefinitionBase y) =>
+                {
+                    return x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds);
+                });
+            }
+
             foreach (var definition in MyDefinitionManager.Static.GetPhysicalItemDefinitions())
             {
                 if (!definition.Enabled || !definition.Public)
@@ -82,11 +119,87 @@ namespace CargoSorter
                     MakeNormalizedId(definition.Id, "Ingot");
                 }
 
-                if (definition is MyUsableItemDefinition || definition is MyDatapadDefinition || definition is MyPackageDefinition || definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
+                if (definition is MyConsumableItemDefinition)
+                {
+                    bool isInRecipe = false;
+                    foreach (var blueprint in MyDefinitionManager.Static.GetBlueprintDefinitions())
+                    {
+                        foreach (var prereq in blueprint.Prerequisites)
+                        {
+                            if (prereq.Id == definition.Id)
+                            {
+                                isInRecipe = true;
+                                goto checkForRecipe;
+                            }
+                        }
+                    }
+
+                checkForRecipe:
+                    if (!isInRecipe)
+                    {
+                        allConsumables.Add(definition.Id);
+                        allVolumes[definition.Id] = definition.Volume;
+                        MakeNormalizedId(definition.Id, "Item");
+                    }
+                    else
+                    {
+                        allIngredients.Add(definition.Id);
+                        allVolumes[definition.Id] = definition.Volume;
+                        MakeNormalizedId(definition.Id, "Item");
+                    }
+                }
+
+                if (definition.Id.TypeId == seedTypeID)
+                {
+                    allIngredients.Add(definition.Id);
+                    allVolumes[definition.Id] = definition.Volume;
+                    MakeNormalizedId(definition.Id, "Seed");
+                }
+
+                if (definition is MyDatapadDefinition || definition is MyPackageDefinition)
                 {
                     allTools.Add(definition.Id);
                     allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Item");
+                }
+
+                if (definition.Id.TypeId == typeof(MyObjectBuilder_PhysicalObject))
+                {
+                    if (!(allConsumables.Contains(definition.Id) || allIngredients.Contains(definition.Id) || allTools.Contains(definition.Id)))
+                    {
+                        bool isInRecipe = false;
+                        foreach (var consumable in allConsumables)
+                        {
+                            List<MyBlueprintDefinitionBase> blueprints;
+                            if (TryGetBlueprintDefinitionsByResultId(consumable, out blueprints))
+                            {
+                                foreach (var blueprint in blueprints)
+                                {
+                                    foreach (var prereq in blueprint.Prerequisites)
+                                    {
+                                        if (prereq.Id == definition.Id)
+                                        {
+                                            isInRecipe = true;
+                                            goto checkForRecipe;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    checkForRecipe:
+                        if (!isInRecipe)
+                        {
+                            allTools.Add(definition.Id);
+                            allVolumes[definition.Id] = definition.Volume;
+                            MakeNormalizedId(definition.Id, "Item");
+                        }
+                        else
+                        {
+                            allIngredients.Add(definition.Id);
+                            allVolumes[definition.Id] = definition.Volume;
+                            MakeNormalizedId(definition.Id, "Item");
+                        }
+                    }
                 }
 
                 if (definition is MyOxygenContainerDefinition)
@@ -140,38 +253,6 @@ namespace CargoSorter
             //{
             //    MyLog.Default.WriteLineAndConsole($"CargoSort: Normalized ID {item.Key} -> {item.Value}");
             //}
-
-            // Have to do this because Keen doesn't provide multiple BPs per item in
-            // MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId
-            // so stuff like stone to ingot is not considered normally.
-            foreach (var definition in MyDefinitionManager.Static.GetBlueprintDefinitions())
-            {
-                foreach (var result in definition.Results)
-                {
-                    List<MyBlueprintDefinitionBase> bpList;
-                    if (resultToBlueprints.TryGetValue(result.Id, out bpList))
-                    {
-                        if (!bpList.Contains(definition))
-                        {
-                            bpList.Add(definition);
-                        }
-                    }
-                    else
-                    {
-                        bpList = new List<MyBlueprintDefinitionBase>() { definition };
-                        resultToBlueprints.Add(result.Id, bpList);
-                    }
-                }
-            }
-            // Do we need to sort these by something based on value? Unlikely since vanilla tends to
-            // have 1 recipe per block per result, but sort by fastest for now.
-            foreach (var resultDef in resultToBlueprints)
-            {
-                resultDef.Value.SortNoAlloc((MyBlueprintDefinitionBase x, MyBlueprintDefinitionBase y) =>
-                {
-                    return x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds);
-                });
-            }
         }
 
         public override void BeforeStart()
@@ -1067,6 +1148,16 @@ namespace CargoSorter
             }
 
             if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Bottles) && allBottles.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Consumables) && allConsumables.Contains(definitionId))
+            {
+                return inventoryInfo.ComputeAmountThatFits(definitionId);
+            }
+
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Ingredients) && allIngredients.Contains(definitionId))
             {
                 return inventoryInfo.ComputeAmountThatFits(definitionId);
             }
@@ -2214,6 +2305,18 @@ namespace CargoSorter
             }
 
             foreach (var item in MakeSortedIdDefs(allBottles))
+            {
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+
+            foreach (var item in MakeSortedIdDefs(allIngredients))
+            {
+                sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
+                sbInv.AppendFormat("{0}=All\n", item.Key);
+            }
+
+            foreach (var item in MakeSortedIdDefs(allConsumables))
             {
                 sbMap.AppendFormat("{0} is {1}\n", item.Key, item.Value);
                 sbInv.AppendFormat("{0}=All\n", item.Key);
