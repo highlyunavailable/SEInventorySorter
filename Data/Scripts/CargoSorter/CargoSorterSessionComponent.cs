@@ -64,8 +64,6 @@ namespace CargoSorter
 
             Instance = this;
 
-
-
             // Have to do this because Keen doesn't provide multiple BPs per item in
             // MyDefinitionManager.Static.TryGetBlueprintDefinitionByResultId
             // so stuff like stone to ingot is not considered normally.
@@ -100,7 +98,7 @@ namespace CargoSorter
 
             foreach (var definition in MyDefinitionManager.Static.GetPhysicalItemDefinitions())
             {
-                if (!definition.Enabled || !definition.Public)
+                if (!definition.Enabled)
                 {
                     continue;
                 }
