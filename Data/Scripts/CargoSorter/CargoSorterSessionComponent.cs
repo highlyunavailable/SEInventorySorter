@@ -36,10 +36,10 @@ namespace CargoSorter
         private readonly HashSet<MyDefinitionId> allIngredients = new HashSet<MyDefinitionId>();
         private readonly Dictionary<MyDefinitionId, List<MyBlueprintDefinitionBase>> resultToBlueprints = new Dictionary<MyDefinitionId, List<MyBlueprintDefinitionBase>>();
 
-        private readonly static MyObjectBuilderType seedTypeID = MyObjectBuilderType.Parse("MyObjectBuilder_SeedItem");
+        private static readonly MyObjectBuilderType SeedTypeId = MyObjectBuilderType.Parse("MyObjectBuilder_SeedItem");
 
         private readonly Dictionary<MyDefinitionId, float> allVolumes = new Dictionary<MyDefinitionId, float>();
-        private readonly static Dictionary<MyDefinitionId, bool> blockConveyorSupport = new Dictionary<MyDefinitionId, bool>();
+        private static readonly Dictionary<MyDefinitionId, bool> BlockConveyorSupport = new Dictionary<MyDefinitionId, bool>();
 
         private readonly WcApi wcApi = new WcApi();
         private readonly HashSet<MyDefinitionId> sorters = new HashSet<MyDefinitionId>();
@@ -86,14 +86,12 @@ namespace CargoSorter
                     }
                 }
             }
+
             // Do we need to sort these by something based on value? Unlikely since vanilla tends to
             // have 1 recipe per block per result, but sort by fastest for now.
             foreach (var resultDef in resultToBlueprints)
             {
-                resultDef.Value.SortNoAlloc((MyBlueprintDefinitionBase x, MyBlueprintDefinitionBase y) =>
-                {
-                    return x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds);
-                });
+                resultDef.Value.SortNoAlloc((MyBlueprintDefinitionBase x, MyBlueprintDefinitionBase y) => { return x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds); });
             }
 
             foreach (var definition in MyDefinitionManager.Static.GetPhysicalItemDefinitions())
@@ -132,7 +130,7 @@ namespace CargoSorter
                         }
                     }
 
-                checkForRecipe:
+                    checkForRecipe:
                     if (!isInRecipe)
                     {
                         allConsumables.Add(definition.Id);
@@ -147,7 +145,7 @@ namespace CargoSorter
                     }
                 }
 
-                if (definition.Id.TypeId == seedTypeID)
+                if (definition.Id.TypeId == SeedTypeId)
                 {
                     allIngredients.Add(definition.Id);
                     allVolumes[definition.Id] = definition.Volume;
@@ -184,7 +182,8 @@ namespace CargoSorter
                                 }
                             }
                         }
-                    checkForRecipe:
+
+                        checkForRecipe:
                         if (!isInRecipe)
                         {
                             allTools.Add(definition.Id);
@@ -485,18 +484,21 @@ namespace CargoSorter
             foreach (var request in inventoryInfo.Requests)
             {
                 List<MyBlueprintDefinitionBase> blueprintDefinitions;
-                if (Instance.TryGetBlueprintDefinitionsByResultId(request.Key, out blueprintDefinitions))
+                if (!Instance.TryGetBlueprintDefinitionsByResultId(request.Key, out blueprintDefinitions))
                 {
-                    // Find usable blueprint
-                    MyBlueprintDefinitionBase blueprintDefinition = null;
-                    foreach (var blueprint in blueprintDefinitions)
+                    continue;
+                }
+
+                // Find usable blueprint
+                foreach (var blueprint in blueprintDefinitions)
+                {
+                    if (!assembler.CanUseBlueprint(blueprint))
                     {
-                        if (assembler.CanUseBlueprint(blueprint))
-                        {
-                            assembler.AddQueueItem(blueprintDefinition, request.Value.Amount);
-                            break;
-                        }
+                        continue;
                     }
+
+                    assembler.AddQueueItem(blueprint, request.Value.Amount);
+                    break;
                 }
             }
 
@@ -1822,7 +1824,10 @@ namespace CargoSorter
 
         private void ExecuteQueueChanges(QuotaManagerWorkData workData)
         {
-            if (workData.QuotaInfo.QuotaItems == null) { return; }
+            if (workData.QuotaInfo.QuotaItems == null)
+            {
+                return;
+            }
 
             // Iterate by QuotaItems so the priority order is preserved
             // Reversed so that we can add to the first index every time and push other items back in queue
@@ -2153,6 +2158,7 @@ namespace CargoSorter
                     {
                         displayStringBuilder.Append("No quota changes needed.");
                     }
+
                     displayStringBuilder.AppendLine();
                     displayStringBuilder.AppendLine();
                     if (warningsBuilder != null)
@@ -2229,7 +2235,6 @@ namespace CargoSorter
         {
             if (block is IMyShipController)
             {
-
                 ShipControllerTerminalControls.DoOnce();
                 actions.AddRange(ShipControllerTerminalControls.Actions);
             }
@@ -2240,7 +2245,6 @@ namespace CargoSorter
             }
             else if (block is IMyProjector)
             {
-
                 ProjectorTerminalControls.DoOnce();
                 actions.AddRange(ProjectorTerminalControls.Actions);
             }
@@ -2260,7 +2264,6 @@ namespace CargoSorter
             }
             else if (block is IMyProjector)
             {
-
                 ProjectorTerminalControls.DoOnce();
                 controls.AddRange(ProjectorTerminalControls.Controls);
             }
@@ -2367,7 +2370,7 @@ namespace CargoSorter
             }
 
             bool supportsConveyors;
-            if (blockConveyorSupport.TryGetValue(block.BlockDefinition, out supportsConveyors))
+            if (BlockConveyorSupport.TryGetValue(block.BlockDefinition, out supportsConveyors))
             {
                 return supportsConveyors;
             }
@@ -2384,7 +2387,7 @@ namespace CargoSorter
                 }
             }
 
-            blockConveyorSupport.Add(block.BlockDefinition, supportsConveyors);
+            BlockConveyorSupport.Add(block.BlockDefinition, supportsConveyors);
             return supportsConveyors;
         }
 
