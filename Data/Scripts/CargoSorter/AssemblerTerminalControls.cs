@@ -48,6 +48,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 var action = MyAPIGateway.TerminalControls.CreateAction<IMyAssembler>("CargoSort_ClearQueueAction");
                 action.Name = new StringBuilder("Clear Queue");
                 action.Icon = @"Textures\GUI\Icons\Actions\Reset.dds";
+                action.ValidForGroups = true;
                 action.InvalidToolbarTypes = new List<MyToolbarType>()
                 {
                     MyToolbarType.Character,
