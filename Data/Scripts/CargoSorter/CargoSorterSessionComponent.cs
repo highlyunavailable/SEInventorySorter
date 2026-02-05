@@ -1753,9 +1753,9 @@ namespace CargoSorter
                 }
 
                 bool gatherInventoryContents = false;
-                if (block is IMyAssembler)
+                var assembler = block as IMyAssembler;
+                if (assembler != null)
                 {
-                    var assembler = block as IMyAssembler;
                     if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ? workData.Block == block : assembler.DisplayNameText.InsensitiveContains(workData.QuotaInfo.GroupName))
                     {
                         workData.GroupAssemblers.Add(ProductionQuotaInfo.ParseQuotaOptions(assembler));
@@ -1834,6 +1834,8 @@ namespace CargoSorter
                 return;
             }
 
+            var availableAssemblers = new List<AssemblerQuotaInfo>();
+
             // Iterate by QuotaItems so the priority order is preserved
             // Reversed so that we can add to the first index every time and push other items back in queue
             // and the highest priority is done last and therefore ends up being first.
@@ -1843,14 +1845,16 @@ namespace CargoSorter
                 MyFixedPoint missingItemCount = workData.MissingItems.GetValueOrDefault(quotaItem.ItemId);
                 MyFixedPoint remainingToQueue = missingItemCount;
 
+                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Starting Remaining To Queue: {remainingToQueue}");
+
                 if (remainingToQueue == MyFixedPoint.Zero)
                 {
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - 0 items");
                     continue;
                 }
 
-                var availableAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(quotaItem.ItemId, null);
-                if (availableAssemblers == null)
+                var itemAssemblers = workData.ItemAvailableAssemblers.GetValueOrDefault(quotaItem.ItemId, null);
+                if (itemAssemblers == null)
                 {
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no available assemblers");
                     continue;
@@ -1863,10 +1867,33 @@ namespace CargoSorter
                     continue;
                 }
 
+                availableAssemblers.Clear();
+                availableAssemblers.AddRange(itemAssemblers);
+
                 float totalWeight = 0;
                 for (int ai = availableAssemblers.Count - 1; ai >= 0; ai--)
                 {
                     var assembler = availableAssemblers[ai];
+                    if (workData.MarkedForDisassembly.Contains(assembler.Block))
+                    {
+                        // This assembler is for disassembly, and therefore cannot be used to assemble.
+                        if (remainingToQueue > MyFixedPoint.Zero)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.DisplayNameText} is disassembling, skipping for assembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
+                            availableAssemblers.RemoveAtFast(ai);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        // This assembler is for assembly, and therefore cannot be used to disassemble.
+                        if (remainingToQueue < MyFixedPoint.Zero)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.DisplayNameText} is assembling, skipping for disassembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
+                            availableAssemblers.RemoveAtFast(ai);
+                            continue;
+                        }
+                    }
 
                     // Find usable blueprint
                     MyBlueprintDefinitionBase blueprintDefinition = null;
@@ -1895,7 +1922,7 @@ namespace CargoSorter
                                 var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
                                 if (queuedBlueprint == blueprintDefinition)
                                 {
-                                    remainingToQueue -= MyFixedPoint.Min(queueItem.Amount, remainingToQueue);
+                                    remainingToQueue -= MyFixedPoint.Min(queueItem.Amount, remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue);
                                 }
                             }
                         }
@@ -1914,9 +1941,19 @@ namespace CargoSorter
 
                 foreach (var assembler in availableAssemblers)
                 {
-                    if (workData.MarkedForDisassembly.Contains(assembler.Block) && assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
+                    if (workData.MarkedForDisassembly.Contains(assembler.Block))
                     {
-                        assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly;
+                        if (assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
+                        {
+                            assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly;
+                        }
+                    }
+                    else
+                    {
+                        if (assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly)
+                        {
+                            assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly;
+                        }
                     }
 
                     // Find usable blueprint
@@ -1966,15 +2003,6 @@ namespace CargoSorter
                                 }
                             }
                         }
-                    }
-
-                    if (remainingToQueue < 0 && assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
-                    {
-                        assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly;
-                    }
-                    else if (remainingToQueue > 0 && assembler.Block.Mode != Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly)
-                    {
-                        assembler.Block.Mode = Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly;
                     }
 
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
