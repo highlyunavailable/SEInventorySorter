@@ -5,6 +5,7 @@ using System.Text;
 using CargoSorter.Data.Scripts.CargoSorter;
 using CoreSystems.Api;
 using ParallelTasks;
+using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
@@ -39,7 +40,11 @@ namespace CargoSorter
         private static readonly MyObjectBuilderType SeedTypeId = MyObjectBuilderType.Parse("MyObjectBuilder_SeedItem");
 
         private readonly Dictionary<MyDefinitionId, float> allVolumes = new Dictionary<MyDefinitionId, float>();
-        private static readonly Dictionary<MyDefinitionId, bool> BlockConveyorSupport = new Dictionary<MyDefinitionId, bool>();
+
+        private static readonly Dictionary<MyDefinitionId, bool> BlockConveyorSupport = new Dictionary<MyDefinitionId, bool>
+        {
+            { new MyDefinitionId(typeof(MyObjectBuilder_InteriorTurret), "LargeInteriorTurret"), false }
+        };
 
         private readonly WcApi wcApi = new WcApi();
         private readonly HashSet<MyDefinitionId> sorters = new HashSet<MyDefinitionId>();
@@ -698,11 +703,6 @@ namespace CargoSorter
 
         private bool IsIgnored(IMyTerminalBlock block)
         {
-            if (!Config.SkipVerifyConveyorConnection && !HasConveyorSupport(block) && !(block.DisplayNameText.InsensitiveContains(Config.SpecialContainerKeyword) || block.DisplayNameText.InsensitiveContains(Config.LimitedContainerKeyword)))
-            {
-                return true;
-            }
-
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
                 if (block.DisplayNameText.InsensitiveContains(item))
@@ -790,7 +790,7 @@ namespace CargoSorter
                             continue;
                         }
 
-                        if (!Config.SkipVerifyConveyorConnection && !sourcePBInv.CanTransferItemTo(destPBInv, pool.Key))
+                        if (destInventory.SupportsConveyors && sourceInventory.SupportsConveyors && !sourcePBInv.CanTransferItemTo(destPBInv, pool.Key))
                         {
                             continue;
                         }
@@ -891,7 +891,12 @@ namespace CargoSorter
                         //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
                         MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
 
-                        if (amountToBeMoved <= MyFixedPoint.Zero || (!Config.SkipVerifyConveyorConnection && !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey)))
+                        if (amountToBeMoved <= MyFixedPoint.Zero)
+                        {
+                            continue;
+                        }
+
+                        if (destInventory.SupportsConveyors && sourceInventory.SupportsConveyors && !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
                         {
                             continue;
                         }
@@ -2388,6 +2393,7 @@ namespace CargoSorter
             }
 
             BlockConveyorSupport.Add(block.BlockDefinition, supportsConveyors);
+            MyLog.Default.WriteLineAndConsole($"{block.DefinitionDisplayNameText} supports conveyors: {supportsConveyors}");
             return supportsConveyors;
         }
 

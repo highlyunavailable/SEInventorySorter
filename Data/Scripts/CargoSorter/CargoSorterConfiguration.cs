@@ -46,7 +46,6 @@ namespace CargoSorter
         public bool ShowProgressNotifications { get; set; }
         public bool ShowMissingItems { get; set; }
         public bool CopyResultsToClipboard { get; set; }
-        public bool SkipVerifyConveyorConnection { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
@@ -172,7 +171,6 @@ namespace CargoSorter
             AllowSpecialSteal = true;
             ShowProgressNotifications = true;
             ShowMissingItems = true;
-            SkipVerifyConveyorConnection = false;
         }
 
         private string CurrentOrDefault(string str, string defaultStr)

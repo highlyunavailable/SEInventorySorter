@@ -29,6 +29,7 @@ namespace CargoSorter
         public readonly MyInventory RealInventory;
         public readonly IMyCubeBlock Block;
         public readonly MyIniParseResult ConfigParseResult;
+        public readonly bool SupportsConveyors;
 
         public InventoryInfo(MyInventory realInventory, string profile)
         {
@@ -41,6 +42,7 @@ namespace CargoSorter
             MaxMass = realInventory.MaxMass;
             Constraint = realInventory.Constraint;
             RealInventory = realInventory;
+            SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block);
 
             foreach (var item in realInventory.GetItems())
             {
