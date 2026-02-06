@@ -29,6 +29,8 @@ namespace CargoSorter.Data.Scripts.CargoSorter
 
             Actions = new List<IMyTerminalAction>();
             Controls = new List<IMyTerminalControl>();
+
+			// Set up actions
             {
                 var action = MyAPIGateway.TerminalControls.CreateAction<IMyAssembler>("CargoSort_Quota");
                 action.Enabled = HasQuotaCustomData;
@@ -58,6 +60,8 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 action.Action = ClearAssemblerQueueItems;
                 Actions.Add(action);
             }
+
+			// Set up controls
             {
                 var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
                 control.Title = MyStringId.GetOrCompute("Clear Queue");
