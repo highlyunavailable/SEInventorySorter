@@ -15,6 +15,7 @@ namespace CargoSorter
 {
     public class InventoryInfo
     {
+        private static readonly char[] sectionEndCharacters = { '\r', '\n', ']' };
         private static readonly MyIni iniParser = new MyIni();
         public byte Priority;
         public TypeRequests TypeRequests;
@@ -27,13 +28,13 @@ namespace CargoSorter
         public readonly MyFixedPoint MaxMass;
         public readonly MyInventoryConstraint Constraint;
         public readonly MyInventory RealInventory;
-        public readonly IMyCubeBlock Block;
+        public readonly IMyTerminalBlock Block;
         public readonly MyIniParseResult ConfigParseResult;
         public readonly bool SupportsConveyors;
 
         public InventoryInfo(MyInventory realInventory, string profile)
         {
-            Block = realInventory.Entity as IMyCubeBlock;
+            Block = realInventory.Entity as IMyTerminalBlock;
             Priority = byte.MaxValue;
             VirtualInventory = new Dictionary<MyDefinitionId, MyFixedPoint>(realInventory.GetItemsCount());
             VirtualVolume = realInventory.CurrentVolume;
@@ -53,7 +54,7 @@ namespace CargoSorter
             }
 
             var config = CargoSorterSessionComponent.Instance?.Config;
-            if (config == null)
+            if (config == null || Block == null)
             {
                 TypeRequests = TypeRequests.Nothing;
                 return;
@@ -76,46 +77,83 @@ namespace CargoSorter
                     {
                         TypeRequests |= TypeRequests.Ores;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.IngotContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ingots;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.ComponentContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Components;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.ToolContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Tools;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.AmmoContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ammo;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.BottleContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Bottles;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.ConsumablesContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Consumables;
                     }
+
                     if (Block.DisplayNameText.InsensitiveContains(config.IngredientsContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ingredients;
                     }
                 }
+
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
                     ConfigParseResult = ParseCustomDataRequests(this, null);
                 }
             }
-            if (!string.IsNullOrEmpty(profile) && Block.DisplayNameText.InsensitiveContains(profile))
+
+            if (!string.IsNullOrEmpty(profile) && Block.CustomData.Length > 0)
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort ({profile}): {Block.DisplayNameText}");
-                TypeRequests = TypeRequests.Special;
-                ConfigParseResult = ParseCustomDataRequests(this, profile);
+                var inventoryProfileStartIndex = 0;
+                while (inventoryProfileStartIndex != -1)
+                {
+                    inventoryProfileStartIndex = Block.CustomData.IndexOf("[Inventory:", inventoryProfileStartIndex, StringComparison.OrdinalIgnoreCase);
+                    if (inventoryProfileStartIndex == -1)
+                    {
+                        break;
+                    }
+
+                    inventoryProfileStartIndex += 11;
+                    if (inventoryProfileStartIndex >= Block.CustomData.Length)
+                    {
+                        break;
+                    }
+
+                    var inventoryProfileTerminatorIndex = Block.CustomData.IndexOfAny(sectionEndCharacters, inventoryProfileStartIndex);
+
+                    if (inventoryProfileTerminatorIndex == -1 || inventoryProfileTerminatorIndex - inventoryProfileStartIndex <= 0 || Block.CustomData[inventoryProfileTerminatorIndex] != ']')
+                    {
+                        continue;
+                    }
+
+                    if (Block.CustomData.IndexOf(profile, inventoryProfileStartIndex, inventoryProfileTerminatorIndex - inventoryProfileStartIndex, StringComparison.OrdinalIgnoreCase) == -1)
+                    {
+                        continue;
+                    }
+
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort ({profile}): {Block.DisplayNameText}");
+                    TypeRequests = TypeRequests.Special;
+                    ConfigParseResult = ParseCustomDataRequests(this, profile);
+                }
             }
 
             if (Requests != null && Requests.Count > 0)
@@ -139,6 +177,7 @@ namespace CargoSorter
                         foundTerminator = true;
                         break;
                     }
+
                     priorityLen++;
                 }
 
@@ -192,14 +231,16 @@ namespace CargoSorter
                     TypeRequests = TypeRequests.ConsumableAmmo;
                     Priority = 0;
                 }
+
                 // Always mark sorters as having SorterItems request types
                 if (Block is IMyConveyorSorter)
                 {
-                    TypeRequests |= CargoSorterSessionComponent.Instance.IsSorter(Block as IMyConveyorSorter) ?
-                        TypeRequests.SorterItems :
-                        TypeRequests.ConsumableAmmo;
+                    TypeRequests |= CargoSorterSessionComponent.Instance.IsSorter(Block as IMyConveyorSorter) ? TypeRequests.SorterItems : TypeRequests.ConsumableAmmo;
 
-                    if (Priority == byte.MaxValue) { Priority = 0; }
+                    if (Priority == byte.MaxValue)
+                    {
+                        Priority = 0;
+                    }
                 }
             }
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
@@ -221,28 +262,29 @@ namespace CargoSorter
                     sumVolume += request.Value.Amount * itemVolume;
                 }
             }
+
             return sumVolume <= maxVolume;
         }
 
         private MyIniParseResult ParseCustomDataRequests(InventoryInfo inventoryInfo, string profile)
         {
             MyIniParseResult quotaParseResult = new MyIniParseResult();
-            var terminalBlock = inventoryInfo.Block as IMyTerminalBlock;
-            if (!Util.IsValid(terminalBlock))
+            if (!Util.IsValid(inventoryInfo.Block))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} isn't a terminal block");
                 return quotaParseResult;
             }
+
             iniParser.Clear();
 
             var sectionName = string.IsNullOrEmpty(profile) ? "Inventory" : $"Inventory:{profile}";
 
-            if (!iniParser.TryParse(terminalBlock.CustomData, out quotaParseResult))
+            if (!iniParser.TryParse(Block.CustomData, out quotaParseResult))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
-                if (IsCustomDataEmpty(terminalBlock.CustomData))
+                if (IsCustomDataEmpty(Block.CustomData))
                 {
-                    terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, sectionName, iniParser);
+                    Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, iniParser);
                 }
                 else
                 {
@@ -254,8 +296,9 @@ namespace CargoSorter
             if (!iniParser.ContainsSection(sectionName))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} has no {sectionName} config section");
-                terminalBlock.CustomData = BuildCurrentContentsSpecialData(terminalBlock, sectionName, iniParser);
+                Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, iniParser);
             }
+
             List<MyIniKey> iniKeys = new List<MyIniKey>();
             iniParser.GetKeys(sectionName, iniKeys);
 
@@ -271,6 +314,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 // Allow forcing a new priority with a special key
                 if (iniKey.Name.Equals("Priority", StringComparison.OrdinalIgnoreCase))
                 {
@@ -281,6 +325,7 @@ namespace CargoSorter
                         continue;
                     }
                 }
+
                 MyDefinitionId definitionId;
                 if (!CargoSorterSessionComponent.Instance.TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                 {
@@ -321,6 +366,7 @@ namespace CargoSorter
                     {
                         requestValue.Flag = RequestFlags.Minimum;
                     }
+
                     inventoryInfo.Requests[definitionId] = requestValue;
                 }
             }
@@ -367,6 +413,7 @@ namespace CargoSorter
                 massToBeMoved = 0;
                 return false;
             }
+
             volumeToBeMoved = amount * physItem.Volume;
             massToBeMoved = amount * physItem.Mass;
             return !(volumeToBeMoved + VirtualVolume > MaxVolume) && !(massToBeMoved + VirtualMass > MaxMass);
@@ -379,6 +426,7 @@ namespace CargoSorter
             {
                 return MyFixedPoint.Zero;
             }
+
             MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)VirtualVolume) / (double)physItem.Volume), 0);
             MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)VirtualMass) / (double)physItem.Mass), 0);
             MyFixedPoint amount = MyFixedPoint.Min(a, b);
@@ -386,6 +434,7 @@ namespace CargoSorter
             {
                 amount = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)amount * 1000.0) / 1000.0));
             }
+
             return amount;
         }
 
@@ -396,6 +445,7 @@ namespace CargoSorter
             {
                 return MyFixedPoint.Zero;
             }
+
             MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)volumeReserved) / (double)physItem.Volume), 0);
             MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)massReserved) / (double)physItem.Mass), 0);
             MyFixedPoint myFixedPoint = MyFixedPoint.Min(a, b);
@@ -403,6 +453,7 @@ namespace CargoSorter
             {
                 myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
             }
+
             return myFixedPoint;
         }
 
@@ -412,19 +463,22 @@ namespace CargoSorter
             {
                 ini = new MyIni();
             }
+
             if (string.IsNullOrEmpty(sectionName))
             {
                 sectionName = "Inventory";
             }
+
             ini.AddSection(sectionName);
             foreach (var item in items
-                .Select(i => new KeyValuePair<string, int>(
-                    CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(i.Key),
-                    (ceiling ? MyFixedPoint.Ceiling(i.Value) : i.Value).ToIntSafe()))
-                .OrderBy(i => i.Key))
+                         .Select(i => new KeyValuePair<string, int>(
+                             CargoSorterSessionComponent.Instance.GetFriendlyDefinitionName(i.Key),
+                             (ceiling ? MyFixedPoint.Ceiling(i.Value) : i.Value).ToIntSafe()))
+                         .OrderBy(i => i.Key))
             {
                 ini.Set(sectionName, item.Key, item.Value);
             }
+
             return ini.ToString();
         }
     }
