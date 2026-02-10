@@ -43,7 +43,8 @@ namespace CargoSorter
             MaxMass = realInventory.MaxMass;
             Constraint = realInventory.Constraint;
             RealInventory = realInventory;
-            SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block);
+            // Require conveyors for weapons always since some weapons are balanced by being manually reloadable only.
+            SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
 
             foreach (var item in realInventory.GetItems())
             {
@@ -202,14 +203,10 @@ namespace CargoSorter
                     TypeRequests = TypeRequests.AssemblerIngots;
                     Priority = 0;
 
-                    var assemberBlock = Block as IMyTerminalBlock;
-                    if (Util.IsValid(assemberBlock))
+                    if (Block.CustomData.Contains("[Inventory]"))
                     {
-                        if (assemberBlock.CustomData.Contains("[Inventory]"))
-                        {
-                            Requests = new Dictionary<MyDefinitionId, RequestData>();
-                            ConfigParseResult = ParseCustomDataRequests(this, null);
-                        }
+                        Requests = new Dictionary<MyDefinitionId, RequestData>();
+                        ConfigParseResult = ParseCustomDataRequests(this, null);
                     }
                 }
                 else if (Block is IMyRefinery)
@@ -226,21 +223,15 @@ namespace CargoSorter
                     TypeRequests = TypeRequests.ReactorFuel;
                     Priority = 0;
                 }
-                else if (Block is IMyUserControllableGun || Block is IMyParachute)
+                else if (CargoSorterSessionComponent.Instance.IsWeapon(Block) || Block is IMyParachute)
                 {
                     TypeRequests = TypeRequests.ConsumableAmmo;
                     Priority = 0;
                 }
-
-                // Always mark sorters as having SorterItems request types
-                if (Block is IMyConveyorSorter)
+                else if (Block is IMyConveyorSorter)
                 {
-                    TypeRequests |= CargoSorterSessionComponent.Instance.IsSorter(Block as IMyConveyorSorter) ? TypeRequests.SorterItems : TypeRequests.ConsumableAmmo;
-
-                    if (Priority == byte.MaxValue)
-                    {
-                        Priority = 0;
-                    }
+                    TypeRequests = TypeRequests.SorterItems;
+                    Priority = 0;
                 }
             }
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");

@@ -21,12 +21,15 @@ namespace CargoSorter
     {
         public static readonly string QuotaSectionName = "Quota";
         public static readonly string OptionsSectionName = "QuotaOptions";
+
         private static readonly MyIni iniParser = new MyIni();
+
         // Using a list for this because the item order is implicit priority
         public RequestValidationStatus RequestStatus;
         public List<AssemblerQuotaItem> QuotaItems;
         public readonly string GroupName;
         public readonly MyIniParseResult ConfigParseResult;
+
         public ProductionQuotaInfo(IMyAssembler block)
         {
             // Check to see if the block even has quota data. If it doesn't, there's nothing to do!
@@ -35,6 +38,7 @@ namespace CargoSorter
                 RequestStatus = RequestValidationStatus.InvalidCustomData;
                 return;
             }
+
             // Determine if we have a quota group as part of the assembler name
             const string tag = "[Primary:";
             var groupStartIndex = block.DisplayNameText.IndexOf(tag);
@@ -70,9 +74,20 @@ namespace CargoSorter
 
             List<MyIniKey> iniKeys = new List<MyIniKey>();
             iniParser.GetKeys(OptionsSectionName, iniKeys);
-            if (!iniParser.Get(OptionsSectionName, "AllowAssembly").TryGetBoolean(out result.AllowAssembly)) { result.AllowAssembly = true; }
-            if (!iniParser.Get(OptionsSectionName, "AllowDisassembly").TryGetBoolean(out result.AllowDisassembly)) { result.AllowDisassembly = false; }
-            if (!iniParser.Get(OptionsSectionName, "ClearQueue").TryGetBoolean(out result.ClearQueue)) { result.ClearQueue = true; }
+            if (!iniParser.Get(OptionsSectionName, "AllowAssembly").TryGetBoolean(out result.AllowAssembly))
+            {
+                result.AllowAssembly = true;
+            }
+
+            if (!iniParser.Get(OptionsSectionName, "AllowDisassembly").TryGetBoolean(out result.AllowDisassembly))
+            {
+                result.AllowDisassembly = false;
+            }
+
+            if (!iniParser.Get(OptionsSectionName, "ClearQueue").TryGetBoolean(out result.ClearQueue))
+            {
+                result.ClearQueue = true;
+            }
 
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} Quota Options config: AllowAssembly: {result.AllowAssembly}, AllowDisassembly: {result.AllowDisassembly}, ClearQueue: {result.ClearQueue}");
             return result;
@@ -88,6 +103,7 @@ namespace CargoSorter
                 RequestStatus |= RequestValidationStatus.InvalidCustomData;
                 return quotaParseResult;
             }
+
             List<MyIniKey> iniKeys = new List<MyIniKey>();
             iniParser.GetKeys(QuotaSectionName, iniKeys);
 
@@ -103,6 +119,7 @@ namespace CargoSorter
                 {
                     continue;
                 }
+
                 MyDefinitionId definitionId;
                 if (!CargoSorterSessionComponent.Instance.TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                 {
@@ -118,27 +135,26 @@ namespace CargoSorter
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} key {iniKey.Name} has an empty value, skipping");
                     continue;
                 }
-                else
-                {
-                    int itemCount;
-                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
-                    {
-                        RequestStatus |= RequestValidationStatus.InvalidCount;
-                        continue;
-                    }
 
-                    var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, RequestFlags.None);
-                    var lastChar = valueString[valueString.Length - 1];
-                    if (lastChar == 'L' || lastChar == 'l')
-                    {
-                        quotaItem.Flag = RequestFlags.Limit;
-                    }
-                    else if (lastChar == 'M' || lastChar == 'm')
-                    {
-                        quotaItem.Flag = RequestFlags.Minimum;
-                    }
-                    QuotaItems.Add(quotaItem);
+                int itemCount;
+                if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                {
+                    RequestStatus |= RequestValidationStatus.InvalidCount;
+                    continue;
                 }
+
+                var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, RequestFlags.None);
+                var lastChar = valueString[valueString.Length - 1];
+                if (lastChar == 'L' || lastChar == 'l')
+                {
+                    quotaItem.Flag = RequestFlags.Limit;
+                }
+                else if (lastChar == 'M' || lastChar == 'm')
+                {
+                    quotaItem.Flag = RequestFlags.Minimum;
+                }
+
+                QuotaItems.Add(quotaItem);
             }
 
             iniParser.Clear();
@@ -150,6 +166,7 @@ namespace CargoSorter
             return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase);
         }
     }
+
     public struct AssemblerQuotaItem
     {
         public readonly MyDefinitionId ItemId;

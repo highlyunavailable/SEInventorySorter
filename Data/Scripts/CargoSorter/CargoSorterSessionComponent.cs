@@ -47,7 +47,7 @@ namespace CargoSorter
         };
 
         private readonly WcApi wcApi = new WcApi();
-        private readonly HashSet<MyDefinitionId> sorters = new HashSet<MyDefinitionId>();
+        private readonly HashSet<MyDefinitionId> weapons = new HashSet<MyDefinitionId>();
         private readonly Dictionary<string, MyDefinitionId> wcAmmoMagazines = new Dictionary<string, MyDefinitionId>();
         private static readonly MyDefinitionId IgnoredEnergyAmmoDefinitionId = new MyDefinitionId(typeof(MyObjectBuilder_AmmoMagazine), "Energy");
 
@@ -96,7 +96,7 @@ namespace CargoSorter
             // have 1 recipe per block per result, but sort by fastest for now.
             foreach (var resultDef in resultToBlueprints)
             {
-                resultDef.Value.SortNoAlloc((MyBlueprintDefinitionBase x, MyBlueprintDefinitionBase y) => { return x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds); });
+                resultDef.Value.SortNoAlloc((x, y) => x.BaseProductionTimeInSeconds.CompareTo(y.BaseProductionTimeInSeconds));
             }
 
             foreach (var definition in MyDefinitionManager.Static.GetPhysicalItemDefinitions())
@@ -242,9 +242,14 @@ namespace CargoSorter
                 }
             }
 
-            foreach (var def in MyDefinitionManager.Static.GetDefinitionsOfType<MyConveyorSorterDefinition>())
+            foreach (var def in MyDefinitionManager.Static.GetDefinitionsOfType<MyWeaponBlockDefinition>())
             {
-                sorters.Add(def.Id);
+                weapons.Add(def.Id);
+            }
+
+            foreach (var def in MyDefinitionManager.Static.GetDefinitionsOfType<MyWarheadDefinition>())
+            {
+                weapons.Add(def.Id);
             }
 
             //foreach (var item in friendlyTypeNames)
@@ -271,7 +276,7 @@ namespace CargoSorter
         {
             var allCoreWeapons = new HashSet<MyDefinitionId>();
             wcApi.GetAllCoreWeapons(allCoreWeapons);
-            sorters.ExceptWith(allCoreWeapons);
+            weapons.UnionWith(allCoreWeapons);
 
             var allWeaponMagazines = new Dictionary<MyDefinitionId, List<MyTuple<int, MyTuple<MyDefinitionId, string, string, bool>>>>();
             wcApi.GetAllWeaponMagazines(allWeaponMagazines);
@@ -317,7 +322,7 @@ namespace CargoSorter
             return false;
         }
 
-        public string GetFriendlyTypeName(MyDefinitionId definitionId)
+        private string GetFriendlyTypeName(MyDefinitionId definitionId)
         {
             string friendlyName;
             if (friendlyTypeNames.TryGetValue(definitionId.TypeId, out friendlyName))
@@ -347,7 +352,7 @@ namespace CargoSorter
             return false;
         }
 
-        public bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions)
+        private bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions)
         {
             return resultToBlueprints.TryGetValue(definitionId, out definitions);
         }
@@ -444,7 +449,6 @@ namespace CargoSorter
 
         public string GenerateResultCustomDataFromQueue(IMyAssembler assembler)
         {
-            var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
             var queueResults = new Dictionary<MyDefinitionId, MyFixedPoint>();
             foreach (var queuedItem in assembler.GetQueue())
             {
@@ -472,7 +476,6 @@ namespace CargoSorter
 
         public bool GenerateQueueFromCustomData(IMyAssembler assembler)
         {
-            var result = new ValueTuple<Dictionary<string, MyFixedPoint>, Dictionary<string, MyFixedPoint>>(new Dictionary<string, MyFixedPoint>(), new Dictionary<string, MyFixedPoint>());
             var inputInventory = assembler?.InputInventory as MyInventory;
             if (inputInventory == null)
             {
@@ -563,14 +566,15 @@ namespace CargoSorter
                     GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
                 }
 
-                workData.Inventories.SortNoAlloc((InventoryInfo x, InventoryInfo y) =>
+                workData.Inventories.SortNoAlloc((x, y) =>
                 {
                     // Blocks and specials go first
                     if (x.TypeRequests.HasFlag(TypeRequests.Special) && !y.TypeRequests.HasFlag(TypeRequests.Special))
                     {
                         return -1;
                     }
-                    else if (!x.TypeRequests.HasFlag(TypeRequests.Special) && y.TypeRequests.HasFlag(TypeRequests.Special))
+
+                    if (!x.TypeRequests.HasFlag(TypeRequests.Special) && y.TypeRequests.HasFlag(TypeRequests.Special))
                     {
                         return 1;
                     }
@@ -583,15 +587,16 @@ namespace CargoSorter
                     }
 
                     // Sort by name so that the first items in the terminal tend to fill up first
-                    comparison = string.Compare(x.Block.DisplayNameText, y.Block.DisplayNameText);
-                    if (comparison != 0)
+                    comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
+                    if (comparison == 0)
                     {
-                        comparison = string.Compare(x.Block.DisplayNameText, y.Block.DisplayNameText);
-                        return comparison;
+                        return x.Block.EntityId.CompareTo(y.Block.EntityId);
                     }
 
+                    comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
+                    return comparison;
+
                     // Use the entity ID as a fallback so it's fairly stable ordering
-                    return x.Block.EntityId.CompareTo(y.Block.EntityId);
                 });
 
                 //foreach (var item in workData.Inventories)
@@ -665,22 +670,15 @@ namespace CargoSorter
                     }
                     else if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.ConsumableAmmo))
                     {
-                        MyDefinitionId wantedAmmo;
                         if (inventoryInfo.Constraint == null)
                         {
                             continue;
                         }
 
-                        // Use the single possibility if there is one
-                        if (inventory.Constraint.ConstrainedIds.Count == 1)
-                        {
-                            wantedAmmo = inventory.Constraint.ConstrainedIds.First();
-                        }
-                        else
-                        {
-                            // Try WC since we can have more than 1 ammo!
-                            wantedAmmo = GetActiveAmmo(inventoryInfo.Block as MyEntity);
-                        }
+                        // ReSharper disable once PossibleNullReferenceException
+                        var wantedAmmo = inventory.Constraint.ConstrainedIds.Count == 1
+                            ? inventory.Constraint.ConstrainedIds.First() // Use the single possibility if there is one
+                            : GetActiveAmmo(inventoryInfo.Block as MyEntity); // Try WC since we can have more than 1 ammo!
 
                         // Ignore weaponcore energy "ammo" or empty ammos which can happen if WC fails
                         if (wantedAmmo == IgnoredEnergyAmmoDefinitionId || wantedAmmo == default(MyDefinitionId))
@@ -749,7 +747,7 @@ namespace CargoSorter
                     continue;
                 }
 
-                var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
+                VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
 
                 foreach (var pool in workData.ExcessPools)
@@ -782,7 +780,7 @@ namespace CargoSorter
                         }
 
                         var sourceInventory = inventoryExcess.Inventory;
-                        var sourcePBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)sourceInventory.RealInventory;
+                        VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
 
                         if (sourceInventory.VirtualInventory.GetValueOrDefault(pool.Key) < amountToBeMoved)
                         {
@@ -829,7 +827,7 @@ namespace CargoSorter
             for (int sourceInvIndex = workData.Inventories.Count - 1; sourceInvIndex >= 0; sourceInvIndex--)
             {
                 var sourceInventory = workData.Inventories[sourceInvIndex];
-                var sourcePBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)sourceInventory.RealInventory;
+                VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
                 if (sourceInventory.VirtualInventory.Count == 0) // Nothing to transfer out
                 {
@@ -875,7 +873,7 @@ namespace CargoSorter
                         continue;
                     }
 
-                    var destPBInv = (VRage.Game.ModAPI.Ingame.IMyInventory)destInventory.RealInventory;
+                    VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
 
                     for (int invKeyIndex = inventoryKeys.Count - 1; invKeyIndex >= 0; invKeyIndex--)
@@ -1100,7 +1098,8 @@ namespace CargoSorter
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too little, returning ({expectedAmount} - {virtualAmount}) {expectedAmount - virtualAmount}");
                     return expectedAmount - virtualAmount;
                 }
-                else if (currentValue > expectedAmount)
+
+                if (currentValue > expectedAmount)
                 {
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel too much, returning ({expectedAmount} - {currentValue}) {expectedAmount - currentValue}");
                     return expectedAmount - currentValue;
@@ -1180,8 +1179,7 @@ namespace CargoSorter
 
             if (inventoryInfo.Requests.TryGetValue(definitionId, out requestInfo))
             {
-                MyFixedPoint virtualAmount;
-                virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+                var virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
                 if ((requestInfo.Flag <= RequestFlags.All) ||
                     (requestInfo.Flag == RequestFlags.Limit && virtualAmount > requestInfo.Amount) ||
@@ -1317,7 +1315,6 @@ namespace CargoSorter
                                 if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                 {
                                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
-                                    continue;
                                 }
                             }
                         }
@@ -1400,7 +1397,6 @@ namespace CargoSorter
                                     if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                     {
                                         warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
-                                        continue;
                                     }
                                 }
                             }
@@ -1498,15 +1494,12 @@ namespace CargoSorter
                     }, Config.CopyResultsToClipboard && groups.Count > 0 ? "Copy to Clipboard" : null);
 
                     break;
-                default:
-                    break;
             }
         }
 
         private int ExecuteMovementData(CargoSorterWorkData workData)
         {
             int transferRequests = 0;
-            List<KeyValuePair<uint, MyFixedPoint>> itemOps = new List<KeyValuePair<uint, MyFixedPoint>>();
             foreach (var movement in workData.MovementData)
             {
                 if (!Util.IsValid(movement.Source.Block) || !Util.IsValid(movement.Destination.Block))
@@ -1727,7 +1720,7 @@ namespace CargoSorter
                 }
 
                 // Reorder the assemblers as this is used later to handle assembly/disassembly priority
-                item.Value.SortNoAlloc((AssemblerQuotaInfo x, AssemblerQuotaInfo y) =>
+                item.Value.SortNoAlloc((x, y) =>
                 {
                     // Sort assemblers that clear their queue first
                     var comparedClear = y.ClearQueue.CompareTo(x.ClearQueue);
@@ -2073,7 +2066,6 @@ namespace CargoSorter
                                         if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                         {
                                             MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.DisplayNameText}'");
-                                            continue;
                                         }
                                     }
                                 }
@@ -2128,7 +2120,6 @@ namespace CargoSorter
                                         if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                         {
                                             warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
-                                            continue;
                                         }
                                     }
                                 }
@@ -2259,8 +2250,6 @@ namespace CargoSorter
                     }, Config.CopyResultsToClipboard && groups.Count > 0 ? "Copy to Clipboard" : null);
 
                     break;
-                default:
-                    break;
             }
         }
 
@@ -2306,7 +2295,6 @@ namespace CargoSorter
         {
             var sbMap = new StringBuilder();
             var sbInv = new StringBuilder();
-            Dictionary<MyDefinitionId, MyFixedPoint> itemIdsForCustomData = new Dictionary<MyDefinitionId, MyFixedPoint>();
             sbMap.AppendLine("Sortable Items ([Sortable ID] is [Display Name]) - scroll down for inventory format");
             foreach (var item in MakeSortedIdDefs(allOres))
             {
@@ -2425,14 +2413,13 @@ namespace CargoSorter
             return supportsConveyors;
         }
 
-        // Required because many weaponcore weapons are conveyor sorters
-        public bool IsSorter(IMyConveyorSorter myConveyorSorter)
+        public bool IsWeapon(IMyCubeBlock block)
         {
-            return sorters.Contains(myConveyorSorter.BlockDefinition);
+            return block is IMyUserControllableGun || weapons.Contains(block.BlockDefinition);
         }
 
         // Get the active ammo for a WC weapon
-        public MyDefinitionId GetActiveAmmo(MyEntity weapon, int weaponId = 0)
+        private MyDefinitionId GetActiveAmmo(MyEntity weapon, int weaponId = 0)
         {
             if (!Util.IsValid(weapon) || wcAmmoMagazines.Count == 0 || !wcApi.IsReady)
             {
