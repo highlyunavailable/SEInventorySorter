@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using CargoSorter.Data.Scripts.CargoSorter;
 using CoreSystems.Api;
 using ParallelTasks;
 using Sandbox.Common.ObjectBuilders;
@@ -1929,7 +1928,7 @@ namespace CargoSorter
                 // Out of items to queue, go to next item
                 if (remainingToQueue == MyFixedPoint.Zero)
                 {
-                    break;
+                    continue;
                 }
 
                 foreach (var assembler in availableAssemblers)
@@ -2257,17 +2256,17 @@ namespace CargoSorter
         {
             if (block is IMyShipController)
             {
-                ShipControllerTerminalControls.DoOnce();
+                ShipControllerTerminalControls.EnsureControlSetup();
                 actions.AddRange(ShipControllerTerminalControls.Actions);
             }
             else if (block is IMyAssembler)
             {
-                AssemblerTerminalControls.DoOnce();
+                AssemblerTerminalControls.EnsureControlSetup();
                 actions.AddRange(AssemblerTerminalControls.Actions);
             }
             else if (block is IMyProjector)
             {
-                ProjectorTerminalControls.DoOnce();
+                ProjectorTerminalControls.EnsureControlSetup();
                 actions.AddRange(ProjectorTerminalControls.Actions);
             }
         }
@@ -2276,18 +2275,23 @@ namespace CargoSorter
         {
             if (block is IMyShipController)
             {
-                ShipControllerTerminalControls.DoOnce();
+                ShipControllerTerminalControls.EnsureControlSetup();
                 controls.AddRange(ShipControllerTerminalControls.Controls);
             }
             else if (block is IMyAssembler)
             {
-                AssemblerTerminalControls.DoOnce();
+                AssemblerTerminalControls.EnsureControlSetup();
                 controls.AddRange(AssemblerTerminalControls.Controls);
             }
             else if (block is IMyProjector)
             {
-                ProjectorTerminalControls.DoOnce();
+                ProjectorTerminalControls.EnsureControlSetup();
                 controls.AddRange(ProjectorTerminalControls.Controls);
+            }
+            if (CargoTerminalControls.CanFitInCharacterInventory(block))
+            {
+                CargoTerminalControls.EnsureControlSetup();
+                controls.AddRange(CargoTerminalControls.Controls);
             }
         }
 

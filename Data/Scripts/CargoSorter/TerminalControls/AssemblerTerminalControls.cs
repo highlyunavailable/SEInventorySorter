@@ -13,14 +13,38 @@ using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRage.Game;
 
-namespace CargoSorter.Data.Scripts.CargoSorter
+namespace CargoSorter
 {
     public static class AssemblerTerminalControls
     {
         public static List<IMyTerminalControl> Controls;
         public static List<IMyTerminalAction> Actions;
         private static bool Done => Controls != null && Actions != null;
-        internal static void DoOnce()
+        private static bool _controlsAdded;
+
+        internal static void EnsureControlAdded()
+        {
+            if (_controlsAdded)
+            {
+                return;
+            }
+
+            EnsureControlSetup();
+
+            _controlsAdded = true;
+
+            foreach (var control in Controls)
+            {
+                MyAPIGateway.TerminalControls.AddControl<IMyAssembler>(control);
+            }
+
+            foreach (var action in Actions)
+            {
+                MyAPIGateway.TerminalControls.AddAction<IMyAssembler>(action);
+            }
+        }
+
+        internal static void EnsureControlSetup()
         {
             if (Done)
             {
@@ -30,7 +54,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
             Actions = new List<IMyTerminalAction>();
             Controls = new List<IMyTerminalControl>();
 
-			// Set up actions
+            // Set up actions
             {
                 var action = MyAPIGateway.TerminalControls.CreateAction<IMyAssembler>("CargoSort_Quota");
                 action.Enabled = HasQuotaCustomData;
@@ -61,7 +85,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 Actions.Add(action);
             }
 
-			// Set up controls
+            // Set up controls
             {
                 var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_ClearQueueButton");
                 control.Title = MyStringId.GetOrCompute("Clear Queue");
@@ -112,12 +136,14 @@ namespace CargoSorter.Data.Scripts.CargoSorter
         }
 
         private static bool HasQueueReady(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyAssembler)?.IsQueueEmpty == false;
+
         private static bool CanMakeQueueFromCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
-            !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.SpecialContainerKeyword) &&
-            !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.LimitedContainerKeyword) &&
-            block.CustomData.Contains("[Inventory]");
+                                                                                  !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.SpecialContainerKeyword) &&
+                                                                                  !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.LimitedContainerKeyword) &&
+                                                                                  block.CustomData.Contains("[Inventory]");
+
         private static bool HasQuotaCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
-            block.CustomData.Contains("[Quota]") && !block.DisplayNameText.InsensitiveContains("[Secondary:");
+                                                                          block.CustomData.Contains("[Quota]") && !block.DisplayNameText.InsensitiveContains("[Secondary:");
 
 
         private static void GeneratePrerequisiteCustomDataFromQueueAction(IMyTerminalBlock block)
@@ -159,6 +185,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", null, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
             }
         }
+
         private static void ClearAssemblerQueueItems(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && block is IMyAssembler)
@@ -168,6 +195,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 {
                     return;
                 }
+
                 var queue = assembler.GetQueue();
                 for (int i = queue.Count - 1; i >= 0; i--)
                 {
@@ -180,7 +208,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
         {
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null && block is IMyAssembler)
             {
-                CargoSorterSessionComponent.Instance.BeginQuotaJob(block as IMyAssembler, ResultsDisplayType.Window);
+                CargoSorterSessionComponent.Instance.BeginQuotaJob((IMyAssembler)block, ResultsDisplayType.Window);
             }
         }
     }

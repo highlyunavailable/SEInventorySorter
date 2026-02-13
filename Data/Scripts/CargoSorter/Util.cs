@@ -33,9 +33,9 @@ namespace CargoSorter
             return sb;
         }
     }
+
     public static class UtilExtensions
     {
-
         //
         // Summary:
         //     Removes whitespace from the end. Copied because the real one is prohibited

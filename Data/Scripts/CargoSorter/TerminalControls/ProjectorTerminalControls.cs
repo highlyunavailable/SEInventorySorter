@@ -12,15 +12,37 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 
-namespace CargoSorter.Data.Scripts.CargoSorter
+namespace CargoSorter
 {
     public static class ProjectorTerminalControls
     {
         public static List<IMyTerminalControl> Controls;
         public static List<IMyTerminalAction> Actions;
         private static bool Done => Controls != null && Actions != null;
+        private static bool _controlsAdded;
+        internal static void EnsureControlAdded()
+        {
+            if (_controlsAdded)
+            {
+                return;
+            }
 
-        internal static void DoOnce()
+            EnsureControlSetup();
+
+            _controlsAdded = true;
+
+            foreach (var control in Controls)
+            {
+                MyAPIGateway.TerminalControls.AddControl<IMyProjector>(control);
+            }
+
+            foreach (var action in Actions)
+            {
+                MyAPIGateway.TerminalControls.AddAction<IMyProjector>(action);
+            }
+        }
+        
+        internal static void EnsureControlSetup()
         {
             if (Done)
             {

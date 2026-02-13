@@ -29,10 +29,8 @@ namespace CargoSorter
                 {
                     return Mgp.GetSubgridCount(projectorBlock.EntityId) > 0;
                 }
-                else
-                {
-                    return projectorBlock.ProjectedGrid != null;
-                }
+
+                return projectorBlock.ProjectedGrid != null;
             }
         }
 

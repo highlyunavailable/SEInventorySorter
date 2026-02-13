@@ -13,14 +13,84 @@ using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRage.Game;
 
-namespace CargoSorter.Data.Scripts.CargoSorter
+namespace CargoSorter
 {
     public static class ShipControllerTerminalControls
     {
         public static List<IMyTerminalControl> Controls;
         public static List<IMyTerminalAction> Actions;
         private static bool Done => Controls != null && Actions != null;
-        internal static void DoOnce()
+        private static bool _controlsCockpitAdded;
+        private static bool _controlsCryoChamberAdded;
+        private static bool _controlsRemoteControlAdded;
+
+        internal static void EnsureControlCockpitAdded()
+        {
+            if (_controlsCockpitAdded)
+            {
+                return;
+            }
+
+            EnsureControlSetup();
+
+            _controlsCockpitAdded = true;
+
+            foreach (var control in Controls)
+            {
+                MyAPIGateway.TerminalControls.AddControl<IMyCockpit>(control);
+            }
+
+            foreach (var action in Actions)
+            {
+                MyAPIGateway.TerminalControls.AddAction<IMyCockpit>(action);
+            }
+        }
+
+        internal static void EnsureControlCryoChamberAdded()
+        {
+            if (_controlsCryoChamberAdded)
+            {
+                return;
+            }
+
+            EnsureControlSetup();
+
+            _controlsCryoChamberAdded = true;
+
+            foreach (var control in Controls)
+            {
+                MyAPIGateway.TerminalControls.AddControl<IMyCryoChamber>(control);
+            }
+
+            foreach (var action in Actions)
+            {
+                MyAPIGateway.TerminalControls.AddAction<IMyCryoChamber>(action);
+            }
+        }
+
+        internal static void EnsureControlRemoteAdded()
+        {
+            if (_controlsRemoteControlAdded)
+            {
+                return;
+            }
+
+            EnsureControlSetup();
+
+            _controlsRemoteControlAdded = true;
+
+            foreach (var control in Controls)
+            {
+                MyAPIGateway.TerminalControls.AddControl<IMyRemoteControl>(control);
+            }
+
+            foreach (var action in Actions)
+            {
+                MyAPIGateway.TerminalControls.AddAction<IMyRemoteControl>(action);
+            }
+        }
+
+        internal static void EnsureControlSetup()
         {
             if (Done)
             {
@@ -37,11 +107,11 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 action.Icon = @"Textures\GUI\Icons\Actions\Reverse.dds";
                 action.ValidForGroups = false;
                 action.InvalidToolbarTypes = new List<MyToolbarType>()
-                    {
-                        MyToolbarType.Character,
-                        MyToolbarType.ButtonPanel,
-                        MyToolbarType.Seat,
-                    };
+                {
+                    MyToolbarType.Character,
+                    MyToolbarType.ButtonPanel,
+                    MyToolbarType.Seat,
+                };
                 action.Action = StartSortToolbarAction;
                 Actions.Add(action);
             }
@@ -60,6 +130,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
         }
 
         public static bool IsControlVisible(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyShipController;
+
         private static void StartSortToolbarAction(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
@@ -67,6 +138,7 @@ namespace CargoSorter.Data.Scripts.CargoSorter
                 CargoSorterSessionComponent.Instance.BeginSortJob(block.CubeGrid, null, ResultsDisplayType.Chat);
             }
         }
+
         private static void StartSortButtonAction(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
