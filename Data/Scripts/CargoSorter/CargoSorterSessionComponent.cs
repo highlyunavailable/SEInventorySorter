@@ -1837,7 +1837,7 @@ namespace CargoSorter
                 MyFixedPoint missingItemCount = workData.MissingItems.GetValueOrDefault(quotaItem.ItemId);
                 MyFixedPoint remainingToQueue = missingItemCount;
 
-                MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Starting Remaining To Queue: {remainingToQueue}");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Starting Remaining To Queue: {remainingToQueue}");
 
                 if (remainingToQueue == MyFixedPoint.Zero)
                 {
@@ -2413,7 +2413,6 @@ namespace CargoSorter
             }
 
             BlockConveyorSupport.Add(block.BlockDefinition, supportsConveyors);
-            MyLog.Default.WriteLineAndConsole($"{block.DefinitionDisplayNameText} supports conveyors: {supportsConveyors}");
             return supportsConveyors;
         }
 
