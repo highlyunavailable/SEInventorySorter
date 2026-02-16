@@ -24,13 +24,13 @@ namespace CargoSorter
         internal readonly Dictionary<MyDefinitionId, MyFixedPoint> AvailableForDistribution = new Dictionary<MyDefinitionId, MyFixedPoint>();
         internal readonly Dictionary<ValueTuple<TypeRequests, MyDefinitionId>, int> RequestTypeCount = new Dictionary<ValueTuple<TypeRequests, MyDefinitionId>, int>();
         internal readonly Dictionary<MyDefinitionId, List<ExcessInfo>> ExcessPools = new Dictionary<MyDefinitionId, List<ExcessInfo>>();
-        internal readonly string Profile = null;
+        internal readonly string SectionName;
 
         public CargoSorterWorkData(IMyCubeGrid cubeGrid, string profile, ResultsDisplayType resultsDisplayType = ResultsDisplayType.Chat)
         {
             RootGrid = cubeGrid;
             ResultsType = resultsDisplayType;
-            Profile = profile;
+            SectionName = string.IsNullOrEmpty(profile) ? "Inventory" : $"Inventory:{profile}";;
         }
     }
 

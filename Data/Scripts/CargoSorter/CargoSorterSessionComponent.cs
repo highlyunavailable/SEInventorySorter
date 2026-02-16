@@ -356,6 +356,24 @@ namespace CargoSorter
             return resultToBlueprints.TryGetValue(definitionId, out definitions);
         }
 
+        public static bool TryGetPhysicalItemProperties(MyDefinitionId definitionId, out float volume, out float mass, out bool hasIntegralAmounts)
+        {
+            MyPhysicalItemDefinition physItem;
+            var validItem = MyDefinitionManager.Static.TryGetPhysicalItemDefinition(definitionId, out physItem);
+            if (validItem)
+            {
+                volume = physItem.Volume;
+                mass = physItem.Mass;
+                hasIntegralAmounts = physItem.HasIntegralAmounts;
+                return true;
+            }
+
+            volume = 0;
+            mass = 0;
+            hasIntegralAmounts = false;
+            return false;
+        }
+
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
             if (messageText.StartsWith("/sort", StringComparison.OrdinalIgnoreCase))
@@ -481,7 +499,7 @@ namespace CargoSorter
                 return false;
             }
 
-            var inventoryInfo = new InventoryInfo(inputInventory, null);
+            var inventoryInfo = new InventoryInfo(inputInventory, "Inventory");
 
             if (inventoryInfo.Requests == null)
             {
@@ -628,7 +646,12 @@ namespace CargoSorter
                 for (int i = 0; i < block.InventoryCount; i++)
                 {
                     var inventory = block.GetInventory(i) as MyInventory;
-                    var inventoryInfo = new InventoryInfo(inventory, workData.Profile);
+                    var inventoryInfo = new InventoryInfo(inventory, workData.SectionName);
+                    if (inventoryInfo.TypeRequests == TypeRequests.Nothing && inventoryInfo.VirtualInventory.Count == 0)
+                    {
+                        continue;
+                    }
+
                     workData.Inventories.Add(inventoryInfo);
                     foreach (var item in inventoryInfo.VirtualInventory)
                     {
@@ -821,23 +844,23 @@ namespace CargoSorter
 
         private void BuildDesiredItemMovement(CargoSorterWorkData workData)
         {
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
+            // MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
             List<MyDefinitionId> inventoryKeys = new List<MyDefinitionId>();
             for (int sourceInvIndex = workData.Inventories.Count - 1; sourceInvIndex >= 0; sourceInvIndex--)
             {
                 var sourceInventory = workData.Inventories[sourceInvIndex];
                 VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
+                // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
                 if (sourceInventory.VirtualInventory.Count == 0) // Nothing to transfer out
                 {
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping due to no items");
+                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping due to no items");
                     continue;
                 }
 
                 // Don't steal items from draining conveyor sorters, they'll just take them back.
                 if (sourceInventory.TypeRequests.HasFlag(TypeRequests.SorterItems) && (sourceInventory.Block as IMyConveyorSorter)?.DrainAll == true)
                 {
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
+                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
                     continue;
                 }
 
@@ -861,7 +884,7 @@ namespace CargoSorter
 
                     if (sourceSpecial && (!Config.AllowSpecialSteal || !destSpecial))
                     {
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
+                        // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
                         continue;
                     }
 
@@ -873,7 +896,7 @@ namespace CargoSorter
                     }
 
                     VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
+                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
 
                     for (int invKeyIndex = inventoryKeys.Count - 1; invKeyIndex >= 0; invKeyIndex--)
                     {
@@ -885,7 +908,7 @@ namespace CargoSorter
                             continue;
                         }
 
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
+                        // MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
                         MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
 
                         if (amountToBeMoved <= MyFixedPoint.Zero)
@@ -898,13 +921,13 @@ namespace CargoSorter
                             continue;
                         }
 
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
+                        MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
 
                         MyFixedPoint volumeToBeMoved;
                         MyFixedPoint massToBeMoved;
                         if (!destInventory.CanItemsFit(amountToBeMoved, virtualItemKey, out volumeToBeMoved, out massToBeMoved))
                         {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {virtualItemKey} with amount {amountToBeMoved} to inventory");
+                            // MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {virtualItemKey} with amount {amountToBeMoved} to inventory");
                             continue;
                         }
 
@@ -952,7 +975,8 @@ namespace CargoSorter
                         (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
                     : MyFixedPoint.Zero;
             }
-            else if (typeRequests == TypeRequests.AssemblerIngots)
+
+            if (typeRequests == TypeRequests.AssemblerIngots)
             {
                 var assembler = inventoryInfo.Block as IMyAssembler;
                 // Make sure the output inventory is clear in normal operation.
@@ -1014,7 +1038,8 @@ namespace CargoSorter
                 // If the assembler is off or full somehow, just take everything out.
                 return -currentValue;
             }
-            else if (typeRequests == TypeRequests.RefineryOre)
+
+            if (typeRequests == TypeRequests.RefineryOre)
             {
                 var refinery = inventoryInfo.Block as IMyRefinery;
                 if (refinery != null)
@@ -1030,12 +1055,14 @@ namespace CargoSorter
                 // If this is the refinery output, or the refinery is off or full somehow, take everything out.
                 return -currentValue;
             }
-            else if (typeRequests == TypeRequests.GasTankBottles)
+
+            if (typeRequests == TypeRequests.GasTankBottles)
             {
                 // Remove all bottles from tanks
                 return -currentValue;
             }
-            else if (typeRequests.HasFlag(TypeRequests.SorterItems))
+
+            if (typeRequests.HasFlag(TypeRequests.SorterItems))
             {
                 var sorter = inventoryInfo.Block as IMyConveyorSorter;
                 if (sorter != null)
@@ -1044,7 +1071,8 @@ namespace CargoSorter
                     {
                         return MyFixedPoint.Zero;
                     }
-                    else if (typeRequests == TypeRequests.SorterItems) // If there are no other flags to handle, just empty it
+
+                    if (typeRequests == TypeRequests.SorterItems) // If there are no other flags to handle, just empty it
                     {
                         return -currentValue;
                     }
@@ -2288,6 +2316,7 @@ namespace CargoSorter
                 ProjectorTerminalControls.EnsureControlSetup();
                 controls.AddRange(ProjectorTerminalControls.Controls);
             }
+
             if (CargoTerminalControls.CanFitInCharacterInventory(block))
             {
                 CargoTerminalControls.EnsureControlSetup();
