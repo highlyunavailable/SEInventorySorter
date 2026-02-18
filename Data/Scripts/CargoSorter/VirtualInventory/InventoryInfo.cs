@@ -469,14 +469,15 @@ namespace CargoSorter
                 return MyFixedPoint.Zero;
             }
 
-            MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)volumeReserved) / (double)mass), 0);
-            MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)massReserved) / (double)volume), 0);
+            MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)volumeReserved) / (double)volume), 0);
+            MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)massReserved) / (double)mass), 0);
             MyFixedPoint myFixedPoint = MyFixedPoint.Min(a, b);
             if (hasIntegralAmounts || forceIntegralAmount)
             {
                 myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
             }
 
+            MyLog.Default.WriteLineAndConsole($"CargoSort ({contentId}): {myFixedPoint} {a} {b}");
             return myFixedPoint;
         }
 
