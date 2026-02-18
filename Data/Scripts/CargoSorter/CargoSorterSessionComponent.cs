@@ -47,6 +47,7 @@ namespace CargoSorter
 
         private readonly WcApi wcApi = new WcApi();
         private readonly HashSet<MyDefinitionId> weapons = new HashSet<MyDefinitionId>();
+        private readonly HashSet<MyDefinitionId> ignoredAmmoWeapons = new HashSet<MyDefinitionId>();
         private readonly Dictionary<string, MyDefinitionId> wcAmmoMagazines = new Dictionary<string, MyDefinitionId>();
         private static readonly MyDefinitionId IgnoredEnergyAmmoDefinitionId = new MyDefinitionId(typeof(MyObjectBuilder_AmmoMagazine), "Energy");
 
@@ -283,6 +284,11 @@ namespace CargoSorter
             {
                 foreach (var magazine in weaponMagazines.Value)
                 {
+                    if (magazine.Item2.Item1 == IgnoredEnergyAmmoDefinitionId)
+                    {
+                        ignoredAmmoWeapons.Add(weaponMagazines.Key);
+                    }
+
                     wcAmmoMagazines[magazine.Item2.Item3] = magazine.Item2.Item1;
                 }
             }
@@ -697,13 +703,17 @@ namespace CargoSorter
                             continue;
                         }
 
+                        if (ignoredAmmoWeapons.Contains(inventoryInfo.Block.BlockDefinition))
+                        {
+                            continue;
+                        }
+
                         // ReSharper disable once PossibleNullReferenceException
                         var wantedAmmo = inventory.Constraint.ConstrainedIds.Count == 1
                             ? inventory.Constraint.ConstrainedIds.First() // Use the single possibility if there is one
                             : GetActiveAmmo(inventoryInfo.Block as MyEntity); // Try WC since we can have more than 1 ammo!
-
                         // Ignore weaponcore energy "ammo" or empty ammos which can happen if WC fails
-                        if (wantedAmmo == IgnoredEnergyAmmoDefinitionId || wantedAmmo == default(MyDefinitionId))
+                        if (wantedAmmo == default(MyDefinitionId))
                         {
                             continue;
                         }
@@ -764,7 +774,7 @@ namespace CargoSorter
             for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
             {
                 var destInventory = workData.Inventories[destInvIndex];
-                if (destInventory.TypeRequests.Equals(TypeRequests.Nothing))
+                if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInventory.IsSatisfied)
                 {
                     continue;
                 }
@@ -774,6 +784,10 @@ namespace CargoSorter
 
                 foreach (var pool in workData.ExcessPools)
                 {
+                    if (pool.Value.Count == 0)
+                    {
+                        continue;
+                    }
                     var destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(pool.Key);
                     var amountWanted = CalculateAmountWanted(destInventory, pool.Key, destCurrentAmount, workData);
                     // We don't want this item or we can't fit any more
@@ -874,7 +888,7 @@ namespace CargoSorter
                     }
 
                     var destInventory = workData.Inventories[destInvIndex];
-                    if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInvIndex == sourceInvIndex)
+                    if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInventory.IsSatisfied || destInvIndex == sourceInvIndex)
                     {
                         continue;
                     }
@@ -921,7 +935,7 @@ namespace CargoSorter
                             continue;
                         }
 
-                        MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
+                        // MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
 
                         MyFixedPoint volumeToBeMoved;
                         MyFixedPoint massToBeMoved;
@@ -931,6 +945,7 @@ namespace CargoSorter
                             continue;
                         }
 
+                        sourceInventory.IsSatisfied = false;
                         AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, virtualItemKey, amountToBeMoved, volumeToBeMoved, massToBeMoved));
                     }
                 }
@@ -2459,6 +2474,7 @@ namespace CargoSorter
             }
 
             var activeAmmo = wcApi.GetActiveAmmo(weapon, weaponId);
+
             if (string.IsNullOrEmpty(activeAmmo))
             {
                 return default(MyDefinitionId);

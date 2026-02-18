@@ -31,6 +31,7 @@ namespace CargoSorter
         public readonly IMyTerminalBlock Block;
         public readonly MyIniParseResult ConfigParseResult;
         public readonly bool SupportsConveyors;
+        public bool IsSatisfied;
 
         public InventoryInfo(MyInventory realInventory, string sectionName)
         {
@@ -45,6 +46,7 @@ namespace CargoSorter
             RealInventory = realInventory;
             // Require conveyors for weapons always since some weapons are balanced by being manually reloadable only.
             SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
+            IsSatisfied = false;
 
             foreach (var item in realInventory.GetItems())
             {
@@ -135,6 +137,50 @@ namespace CargoSorter
                 {
                     RequestStatus |= RequestValidationStatus.TooMuchVolume;
                 }
+
+                IsSatisfied = true;
+                foreach (var request in Requests)
+                {
+                    if (request.Value.Flag == RequestFlags.All)
+                    {
+                        IsSatisfied = false;
+                        continue;
+                    }
+
+                    var currentAmount = VirtualInventory.GetValueOrDefault(request.Key);
+                    if (request.Value.Flag == RequestFlags.None)
+                    {
+                        if (currentAmount == request.Value.Amount)
+                        {
+                            continue;
+                        }
+
+                        IsSatisfied = false;
+                        break;
+                    }
+
+                    if (request.Value.Flag == RequestFlags.Limit)
+                    {
+                        if (currentAmount <= request.Value.Amount)
+                        {
+                            continue;
+                        }
+
+                        IsSatisfied = false;
+                        break;
+                    }
+
+                    if (request.Value.Flag == RequestFlags.Minimum)
+                    {
+                        if (currentAmount >= request.Value.Amount)
+                        {
+                            continue;
+                        }
+
+                        IsSatisfied = false;
+                        break;
+                    }
+                }
             }
 
             var priorityStartIndex = Block.DisplayNameText.IndexOf("[P", StringComparison.OrdinalIgnoreCase);
@@ -186,11 +232,17 @@ namespace CargoSorter
                 else if (Block is IMyRefinery)
                 {
                     TypeRequests = TypeRequests.RefineryOre;
+                    if (((IMyRefinery)Block).UseConveyorSystem)
+                    {
+                        IsSatisfied = true;
+                    }
+
                     Priority = 0;
                 }
                 else if (Block is IMyGasTank)
                 {
                     TypeRequests = TypeRequests.GasTankBottles;
+                    IsSatisfied = true;
                 }
                 else if (Block is IMyReactor)
                 {
@@ -206,6 +258,10 @@ namespace CargoSorter
                 {
                     TypeRequests = TypeRequests.SorterItems;
                     Priority = 0;
+                    if (((IMyConveyorSorter)Block).DrainAll)
+                    {
+                        IsSatisfied = true;
+                    }
                 }
             }
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
