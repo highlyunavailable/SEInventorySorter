@@ -477,7 +477,6 @@ namespace CargoSorter
                 myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
             }
 
-            MyLog.Default.WriteLineAndConsole($"CargoSort ({contentId}): {myFixedPoint} {a} {b}");
             return myFixedPoint;
         }
 
