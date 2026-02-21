@@ -15,6 +15,7 @@ using VRage.Game.Components;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Game.ModAPI.Interfaces;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 
@@ -55,6 +56,9 @@ namespace CargoSorter
         private readonly Dictionary<MyObjectBuilderType, string> friendlyTypeNames = new Dictionary<MyObjectBuilderType, string>();
 
         private Task jobTask;
+        private IMyShipController autoSortingController;
+        private string autoSortProfile;
+        private int autoSortTicksRemaining;
 
         public override void LoadData()
         {
@@ -392,15 +396,64 @@ namespace CargoSorter
                     return;
                 }
 
-                string profile = null;
-                var spaceIndex = messageText.IndexOf(' ');
-
-                if (spaceIndex != -1 && messageText.Length > spaceIndex)
+                var profile = ExtractProfileFromMessage(messageText);
+                BeginSortJob(shipController.CubeGrid, profile, ResultsDisplayType.Chat);
+            }
+            else if (messageText.StartsWith("/csort", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+                var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
+                if (shipController == null)
                 {
-                    profile = messageText.Substring(spaceIndex + 1).Trim().ToLowerInvariant();
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to sort!");
+                    return;
                 }
 
-                BeginSortJob(shipController.CubeGrid, profile, ResultsDisplayType.Chat);
+                var profile = ExtractProfileFromMessage(messageText);
+                BeginConstructSortJob(shipController.CubeGrid, profile, ResultsDisplayType.Chat);
+            }
+            else if (messageText.StartsWith("/asort", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+                var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
+                if (shipController == null)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to auto sort!");
+                    return;
+                }
+
+                if (!shipController.IsMainCockpit || !shipController.CanControlShip)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated in the main cockpit and be controlling the ship to auto sort!");
+                    return;
+                }
+
+                if (autoSortingController == shipController)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "Already auto sorting");
+                    return;
+                }
+
+                autoSortingController = shipController;
+                autoSortTicksRemaining = 0;
+                SetUpdateOrder(MyUpdateOrder.BeforeSimulation);
+                MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntityChanged += OnControlledEntityChanged;
+                autoSortProfile = ExtractProfileFromMessage(messageText);
+                if (string.IsNullOrWhiteSpace(autoSortProfile))
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "Auto sorting started");
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Auto sorting ({autoSortProfile}) started");
+                }
+
+                BeginConstructSortJob(shipController.CubeGrid, autoSortProfile, ResultsDisplayType.None);
+            }
+            else if (messageText.StartsWith("/stopsort", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+                DisableAutoSort();
             }
             else if (messageText.StartsWith("/getallsortableitems", StringComparison.OrdinalIgnoreCase))
             {
@@ -418,6 +471,58 @@ namespace CargoSorter
             }
         }
 
+        private static string ExtractProfileFromMessage(string messageText)
+        {
+            string profile = null;
+            var spaceIndex = messageText.IndexOf(' ');
+
+            if (spaceIndex != -1 && messageText.Length > spaceIndex)
+            {
+                profile = messageText.Substring(spaceIndex + 1).Trim().ToLowerInvariant();
+            }
+
+            return profile;
+        }
+
+        private void OnControlledEntityChanged(IMyControllableEntity lastEntity, IMyControllableEntity currentEntity)
+        {
+            var currentBlock = currentEntity as IMyTerminalBlock;
+            if (autoSortingController != null && currentBlock != null && autoSortingController.CubeGrid.IsSameConstructAs(currentBlock.CubeGrid))
+            {
+                return;
+            }
+
+            DisableAutoSort();
+        }
+
+        private void DisableAutoSort()
+        {
+            MyAPIGateway.Utilities.ShowMessage("Sorter", "Auto sorting stopped");
+            SetUpdateOrder(MyUpdateOrder.NoUpdate);
+            autoSortTicksRemaining = 0;
+            autoSortProfile = null;
+            autoSortingController = null;
+            MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntityChanged -= OnControlledEntityChanged;
+        }
+
+        public override void UpdateBeforeSimulation()
+        {
+            autoSortTicksRemaining--;
+            if (autoSortTicksRemaining > 0 || !jobTask.IsComplete)
+            {
+                return;
+            }
+
+            var currentBlock = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyTerminalBlock;
+            if (autoSortingController == null || currentBlock == null || !autoSortingController.CubeGrid.IsSameConstructAs(currentBlock.CubeGrid))
+            {
+                DisableAutoSort();
+                return;
+            }
+
+            BeginConstructSortJob(autoSortingController.CubeGrid, autoSortProfile, ResultsDisplayType.None);
+        }
+
         public void BeginSortJob(IMyCubeGrid rootGrid, string profile, ResultsDisplayType resultsDisplayType)
         {
             if (jobTask.valid && !jobTask.IsComplete)
@@ -426,7 +531,19 @@ namespace CargoSorter
                 return;
             }
 
-            var workData = new CargoSorterWorkData(rootGrid, profile, resultsDisplayType);
+            var workData = new CargoSorterWorkData(rootGrid, profile, false, resultsDisplayType);
+            jobTask = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
+        }
+
+        public void BeginConstructSortJob(IMyCubeGrid rootGrid, string profile, ResultsDisplayType resultsDisplayType)
+        {
+            if (jobTask.valid && !jobTask.IsComplete)
+            {
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "A job is already in progress!");
+                return;
+            }
+
+            var workData = new CargoSorterWorkData(rootGrid, profile, true, resultsDisplayType);
             jobTask = MyAPIGateway.Parallel.Start(SortInventoryAction, SortInventoryCallback, workData);
         }
 
@@ -538,7 +655,7 @@ namespace CargoSorter
 
         public string GenerateCustomDataFromProjector(IMyProjector projector)
         {
-            ProjectorProxy projectorProxy = new ProjectorProxy(projector);
+            var projectorProxy = new ProjectorProxy(projector);
             if (!projectorProxy.HasBlueprint)
             {
                 return string.Empty;
@@ -577,16 +694,25 @@ namespace CargoSorter
             try
             {
                 var workData = (CargoSorterWorkData)data;
-                var tree = new GridConnectorTree(workData.RootGrid);
-                var nodes = tree.GatherRecursive(c =>
+                if (workData.ConstructOnly)
                 {
-                    return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
-                           c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
-                });
+                    var grids = new HashSet<IMyCubeGrid>();
+                    workData.RootGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(grids);
+                    foreach (var cubeGrid in grids)
+                    {
+                        GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
+                    }
+                }
+                else
+                {
+                    var tree = new GridConnectorTree(workData.RootGrid);
+                    var nodes = tree.GatherRecursive(c => c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
+                                                          c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false);
 
-                foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
-                {
-                    GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
+                    foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
+                    {
+                        GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
+                    }
                 }
 
                 workData.Inventories.SortNoAlloc((x, y) =>
@@ -622,10 +748,10 @@ namespace CargoSorter
                     // Use the entity ID as a fallback so it's fairly stable ordering
                 });
 
-                //foreach (var item in workData.Inventories)
-                //{
-                //    MyLog.Default.WriteLineAndConsole($"CargoSort: {item.Block.DisplayNameText}");
-                //}
+                // foreach (var item in workData.Inventories)
+                // {
+                //     MyLog.Default.WriteLineAndConsole($"CargoSort: {item.Block.DisplayNameText}");
+                // }
 
                 BuildExcessItemPool(workData);
                 BuildExcessItemMovement(workData);
@@ -788,6 +914,7 @@ namespace CargoSorter
                     {
                         continue;
                     }
+
                     var destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(pool.Key);
                     var amountWanted = CalculateAmountWanted(destInventory, pool.Key, destCurrentAmount, workData);
                     // We don't want this item or we can't fit any more
@@ -1122,8 +1249,8 @@ namespace CargoSorter
 
                 var configuredExpected = reactor.CubeGrid?.GridSizeEnum == MyCubeSize.Large ? Config.ExpectedLargeGridReactorFuel : Config.ExpectedSmallGridReactorFuel;
 
-                // <= 0 disables the feature
-                if (configuredExpected <= 0)
+                // <= 0 disables the feature, also not used if the reactor self fills
+                if (configuredExpected <= 0 || reactor.UseConveyorSystem)
                 {
                     return MyFixedPoint.Zero;
                 }
@@ -1274,6 +1401,10 @@ namespace CargoSorter
 
             var transferRequestCount = ExecuteMovementData(workData);
             DisplaySortResults(workData, transferRequestCount);
+            if (autoSortingController != null)
+            {
+                autoSortTicksRemaining = Config.AutoSortFrequencySeconds * 60;
+            }
         }
 
         private void DisplaySortResults(CargoSorterWorkData workData, int transferRequestCount)

@@ -9,7 +9,6 @@ namespace CargoSorter
 {
     public class CargoSorterConfiguration
     {
-
         private const string ConfigFileName = "CargoSort.xml";
 
         public const string defaultSpecialContainerKeyword = "Special";
@@ -46,6 +45,7 @@ namespace CargoSorter
         public bool ShowProgressNotifications { get; set; }
         public bool ShowMissingItems { get; set; }
         public bool CopyResultsToClipboard { get; set; }
+        public int AutoSortFrequencySeconds { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
@@ -118,22 +118,24 @@ namespace CargoSorter
         private bool Validate()
         {
             return !string.IsNullOrWhiteSpace(SpecialContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(LimitedContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(OreContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(IngotContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(ComponentContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(AmmoContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(ToolContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(BottleContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(ConsumablesContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(IngredientsContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(AnyContainerKeyword) &&
-                !string.IsNullOrWhiteSpace(QuotaContainerKeyword) &&
-                LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
-                GasGeneratorFillPercent >= 0f && GasGeneratorFillPercent <= 1f &&
-                ExpectedLargeGridReactorFuel >= 0 &&
-                ExpectedSmallGridReactorFuel >= 0;
+                   !string.IsNullOrWhiteSpace(LimitedContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(OreContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(IngotContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(ComponentContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(AmmoContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(ToolContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(BottleContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(ConsumablesContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(IngredientsContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(AnyContainerKeyword) &&
+                   !string.IsNullOrWhiteSpace(QuotaContainerKeyword) &&
+                   LockedContainerKeywords.All(k => !string.IsNullOrWhiteSpace(k)) &&
+                   GasGeneratorFillPercent >= 0f && GasGeneratorFillPercent <= 1f &&
+                   ExpectedLargeGridReactorFuel >= 0 &&
+                   ExpectedSmallGridReactorFuel >= 0 &&
+                   AutoSortFrequencySeconds > 0;
         }
+
         private void Upgrade()
         {
             SpecialContainerKeyword = CurrentOrDefault(SpecialContainerKeyword, defaultSpecialContainerKeyword);
@@ -148,6 +150,7 @@ namespace CargoSorter
             IngredientsContainerKeyword = CurrentOrDefault(IngredientsContainerKeyword, defaultIngredientsContainerKeyword);
             AnyContainerKeyword = CurrentOrDefault(AnyContainerKeyword, defaultAnyContainerKeyword);
             QuotaContainerKeyword = CurrentOrDefault(QuotaContainerKeyword, defaultQuotaContainerKeyword);
+            AutoSortFrequencySeconds = AutoSortFrequencySeconds > 0 ? AutoSortFrequencySeconds : 10;
         }
 
         private void SetDefaults()
@@ -171,6 +174,7 @@ namespace CargoSorter
             AllowSpecialSteal = true;
             ShowProgressNotifications = true;
             ShowMissingItems = true;
+            AutoSortFrequencySeconds = 10;
         }
 
         private string CurrentOrDefault(string str, string defaultStr)
@@ -179,6 +183,7 @@ namespace CargoSorter
             {
                 return defaultStr;
             }
+
             return str;
         }
     }

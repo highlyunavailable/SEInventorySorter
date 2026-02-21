@@ -115,6 +115,21 @@ namespace CargoSorter
                 action.Action = StartSortToolbarAction;
                 Actions.Add(action);
             }
+            {
+                var action = MyAPIGateway.TerminalControls.CreateAction<IMyShipController>("CargoSort_SortConstruct");
+                action.Enabled = IsControlVisible;
+                action.Name = new StringBuilder("Sort Construct Inventory");
+                action.Icon = @"Textures\GUI\Icons\Actions\Reverse.dds";
+                action.ValidForGroups = false;
+                action.InvalidToolbarTypes = new List<MyToolbarType>()
+                {
+                    MyToolbarType.Character,
+                    MyToolbarType.ButtonPanel,
+                    MyToolbarType.Seat,
+                };
+                action.Action = StartSortConstructToolbarAction;
+                Actions.Add(action);
+            }
 
             {
                 var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyShipController>("CargoSort_SortButton");
@@ -123,6 +138,15 @@ namespace CargoSorter
                 control.SupportsMultipleBlocks = false;
                 control.Visible = IsControlVisible;
                 control.Action = StartSortButtonAction;
+                Controls.Add(control);
+            }
+            {
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyShipController>("CargoSort_SortConstructButton");
+                control.Title = MyStringId.GetOrCompute("Sort Construct Inventory");
+                control.Tooltip = MyStringId.GetOrCompute("Sorts the inventory of the current grid and all physically attached sub-grids");
+                control.SupportsMultipleBlocks = false;
+                control.Visible = IsControlVisible;
+                control.Action = StartSortConstructButtonAction;
                 Controls.Add(control);
             }
 
@@ -139,11 +163,27 @@ namespace CargoSorter
             }
         }
 
+        private static void StartSortConstructToolbarAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
+            {
+                CargoSorterSessionComponent.Instance.BeginConstructSortJob(block.CubeGrid, null, ResultsDisplayType.Chat);
+            }
+        }
+
         private static void StartSortButtonAction(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
             {
                 CargoSorterSessionComponent.Instance.BeginSortJob(block.CubeGrid, null, ResultsDisplayType.Window);
+            }
+        }
+
+        private static void StartSortConstructButtonAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null)
+            {
+                CargoSorterSessionComponent.Instance.BeginConstructSortJob(block.CubeGrid, null, ResultsDisplayType.Window);
             }
         }
     }
