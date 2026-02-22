@@ -4,11 +4,13 @@ namespace CargoSorter
 {
     public enum RequestFlags : byte
     {
-        None = 0,
-        All = 1,
-        Minimum = 2,
-        Limit = 3,
+        None,
+        All,
+        Max,
+        Minimum,
+        Limit,
     }
+
     public struct RequestData
     {
         public MyFixedPoint Amount;

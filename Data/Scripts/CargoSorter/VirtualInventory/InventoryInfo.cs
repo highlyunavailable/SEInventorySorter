@@ -148,7 +148,7 @@ namespace CargoSorter
                     }
 
                     var currentAmount = VirtualInventory.GetValueOrDefault(request.Key);
-                    if (request.Value.Flag == RequestFlags.None)
+                    if (request.Value.Flag == RequestFlags.None || request.Value.Flag == RequestFlags.Max)
                     {
                         if (currentAmount == request.Value.Amount)
                         {
@@ -209,58 +209,82 @@ namespace CargoSorter
                 }
             }
 
-            if (TypeRequests.Equals(TypeRequests.Nothing) && Priority == byte.MaxValue)
+            if (!TypeRequests.Equals(TypeRequests.Nothing) || Priority != byte.MaxValue)
             {
-                if (Block is IMyGasGenerator)
-                {
-                    TypeRequests = TypeRequests.GasGeneratorOre;
-                    Priority = 0;
-                }
-                else if (Block is IMyAssembler) // Survival kits are OK here too
-                {
-                    TypeRequests = TypeRequests.AssemblerIngots;
-                    Priority = 0;
+                return;
+            }
 
-                    if (!Block.CustomData.Contains("[Inventory]"))
-                    {
-                        return;
-                    }
+            // Handle blocks that have special requirements that aren't otherwise specified as needing them
+            if (Block is IMyGasGenerator)
+            {
+                TypeRequests = TypeRequests.GasGeneratorOre;
+                Priority = 0;
+            }
+            else if (Block is IMyAssembler) // Survival kits are OK here too
+            {
+                TypeRequests = TypeRequests.AssemblerIngots;
+                Priority = 0;
 
-                    Requests = new Dictionary<MyDefinitionId, RequestData>();
-                    ConfigParseResult = ParseCustomDataRequests(this, "Inventory");
-                }
-                else if (Block is IMyRefinery)
+                if (!Block.CustomData.Contains("[Inventory]"))
                 {
-                    TypeRequests = TypeRequests.RefineryOre;
-                    if (((IMyRefinery)Block).UseConveyorSystem)
-                    {
-                        IsSatisfied = true;
-                    }
+                    return;
+                }
 
-                    Priority = 0;
-                }
-                else if (Block is IMyGasTank)
+                ConfigParseResult = ParseCustomDataRequests(this, "Inventory");
+                if (ConfigParseResult.Success)
                 {
-                    TypeRequests = TypeRequests.GasTankBottles;
+                    TypeRequests |= TypeRequests.Limited;
+                }
+            }
+            else if (Block is IMyRefinery)
+            {
+                TypeRequests = TypeRequests.RefineryOre;
+                if (((IMyRefinery)Block).UseConveyorSystem)
+                {
                     IsSatisfied = true;
                 }
-                else if (Block is IMyReactor)
+
+                Priority = 0;
+            }
+            else if (Block is IMyGasTank)
+            {
+                TypeRequests = TypeRequests.GasTankBottles;
+                IsSatisfied = true;
+            }
+            else if (Block is IMyReactor)
+            {
+                TypeRequests = TypeRequests.ReactorFuel;
+                var reactor = Block as IMyReactor;
+                if (reactor?.UseConveyorSystem == false && Block.CustomData.Contains("[Inventory]"))
                 {
-                    TypeRequests = TypeRequests.ReactorFuel;
-                    Priority = 0;
-                }
-                else if (CargoSorterSessionComponent.Instance.IsWeapon(Block) || Block is IMyParachute)
-                {
-                    TypeRequests = TypeRequests.ConsumableAmmo;
-                    Priority = 0;
-                }
-                else if (Block is IMyConveyorSorter)
-                {
-                    TypeRequests = TypeRequests.SorterItems;
-                    Priority = 0;
-                    if (((IMyConveyorSorter)Block).DrainAll)
+                    ConfigParseResult = ParseCustomDataRequests(this, "Inventory");
+                    if (ConfigParseResult.Success && Requests.Count > 0)
                     {
-                        IsSatisfied = true;
+                        TypeRequests = TypeRequests.Special;
+                    }
+                }
+
+                Priority = 0;
+            }
+            else if (CargoSorterSessionComponent.Instance.IsWeapon(Block) || Block is IMyParachute)
+            {
+                TypeRequests = TypeRequests.ConsumableAmmo;
+                Priority = 0;
+            }
+            else if (Block is IMyConveyorSorter)
+            {
+                TypeRequests = TypeRequests.SorterItems;
+                Priority = 0;
+                if (((IMyConveyorSorter)Block).DrainAll)
+                {
+                    IsSatisfied = true;
+                }
+                else if (Block.CustomData.Contains("[Inventory]"))
+                {
+                    ConfigParseResult = ParseCustomDataRequests(this, "Inventory");
+                    if (ConfigParseResult.Success && Requests.Count > 0)
+                    {
+                        TypeRequests |= TypeRequests.Limited;
                     }
                 }
             }
@@ -345,6 +369,13 @@ namespace CargoSorter
                     continue;
                 }
 
+                // Check constraints
+                if (inventoryInfo.Constraint != null && !inventoryInfo.Constraint.Check(definitionId))
+                {
+                    inventoryInfo.RequestStatus |= RequestValidationStatus.InvalidItem;
+                    continue;
+                }
+
                 var value = iniParser.Get(iniKey);
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
@@ -357,6 +388,12 @@ namespace CargoSorter
                     if (valueString.Equals("All", StringComparison.OrdinalIgnoreCase))
                     {
                         inventoryInfo.Requests[definitionId] = new RequestData(ComputeAmountThatCouldFit(definitionId), RequestFlags.All);
+                        continue;
+                    }
+
+                    if (valueString.Equals("Max", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inventoryInfo.Requests[definitionId] = new RequestData(ComputeAmountThatCouldFit(definitionId), RequestFlags.Max);
                         continue;
                     }
 
