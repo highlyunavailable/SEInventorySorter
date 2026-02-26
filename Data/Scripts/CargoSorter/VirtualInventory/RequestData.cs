@@ -1,4 +1,5 @@
 ﻿using VRage;
+using VRage.Game;
 
 namespace CargoSorter
 {
@@ -13,11 +14,13 @@ namespace CargoSorter
 
     public struct RequestData
     {
+        public MyDefinitionId DefinitionId;
         public MyFixedPoint Amount;
         public RequestFlags Flag;
 
-        public RequestData(MyFixedPoint amount, RequestFlags flag) : this()
+        public RequestData(MyDefinitionId definitionId, MyFixedPoint amount, RequestFlags flag) : this()
         {
+            DefinitionId = definitionId;
             Amount = amount;
             Flag = flag;
         }

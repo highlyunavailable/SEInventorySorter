@@ -39,8 +39,6 @@ namespace CargoSorter
 
         private static readonly MyObjectBuilderType SeedTypeId = MyObjectBuilderType.Parse("MyObjectBuilder_SeedItem");
 
-        private readonly Dictionary<MyDefinitionId, float> allVolumes = new Dictionary<MyDefinitionId, float>();
-
         private static readonly Dictionary<MyDefinitionId, bool> BlockConveyorSupport = new Dictionary<MyDefinitionId, bool>
         {
             { new MyDefinitionId(typeof(MyObjectBuilder_InteriorTurret), "LargeInteriorTurret"), false }
@@ -113,14 +111,12 @@ namespace CargoSorter
                 if (definition.IsOre)
                 {
                     allOres.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Ore");
                 }
 
                 if (definition.IsIngot)
                 {
                     allIngots.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Ingot");
                 }
 
@@ -143,13 +139,11 @@ namespace CargoSorter
                     if (!isInRecipe)
                     {
                         allConsumables.Add(definition.Id);
-                        allVolumes[definition.Id] = definition.Volume;
                         MakeNormalizedId(definition.Id, "Item");
                     }
                     else
                     {
                         allIngredients.Add(definition.Id);
-                        allVolumes[definition.Id] = definition.Volume;
                         MakeNormalizedId(definition.Id, "Item");
                     }
                 }
@@ -157,14 +151,12 @@ namespace CargoSorter
                 if (definition.Id.TypeId == SeedTypeId)
                 {
                     allIngredients.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Seed");
                 }
 
                 if (definition is MyDatapadDefinition || definition is MyPackageDefinition)
                 {
                     allTools.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Item");
                 }
 
@@ -196,13 +188,11 @@ namespace CargoSorter
                         if (!isInRecipe)
                         {
                             allTools.Add(definition.Id);
-                            allVolumes[definition.Id] = definition.Volume;
                             MakeNormalizedId(definition.Id, "Item");
                         }
                         else
                         {
                             allIngredients.Add(definition.Id);
-                            allVolumes[definition.Id] = definition.Volume;
                             MakeNormalizedId(definition.Id, "Item");
                         }
                     }
@@ -211,21 +201,18 @@ namespace CargoSorter
                 if (definition is MyOxygenContainerDefinition)
                 {
                     allBottles.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Bottle");
                 }
 
                 if (definition is MyComponentDefinition)
                 {
                     allComponents.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Component");
                 }
 
                 if (definition is MyAmmoMagazineDefinition)
                 {
                     allAmmo.Add(definition.Id);
-                    allVolumes[definition.Id] = definition.Volume;
                     MakeNormalizedId(definition.Id, "Ammo");
                 }
             }
@@ -242,7 +229,6 @@ namespace CargoSorter
                 {
                     MakeNormalizedId(handPhysicalItem.Id, "Tool");
                     allTools.Add(handPhysicalItem.Id);
-                    allVolumes[handPhysicalItem.Id] = handPhysicalItem.Volume;
                 }
             }
 
@@ -281,7 +267,6 @@ namespace CargoSorter
             var allCoreWeapons = new HashSet<MyDefinitionId>();
             wcApi.GetAllCoreWeapons(allCoreWeapons);
             weapons.UnionWith(allCoreWeapons);
-
             var allWeaponMagazines = new Dictionary<MyDefinitionId, List<MyTuple<int, MyTuple<MyDefinitionId, string, string, bool>>>>();
             wcApi.GetAllWeaponMagazines(allWeaponMagazines);
             foreach (var weaponMagazines in allWeaponMagazines)
@@ -355,18 +340,6 @@ namespace CargoSorter
         public string GetFriendlyDefinitionName(MyDefinitionId definitionId)
         {
             return $"{GetFriendlyTypeName(definitionId)}/{definitionId.SubtypeName}";
-        }
-
-        public bool TryGetVolume(MyDefinitionId definitionId, out float volume)
-        {
-            if (allVolumes.TryGetValue(definitionId, out volume))
-            {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Volume lookup {definitionId} -> {volume}");
-                return true;
-            }
-
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: Volume lookup {definitionId} failed");
-            return false;
         }
 
         private bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions)
@@ -640,7 +613,7 @@ namespace CargoSorter
             foreach (var request in inventoryInfo.Requests)
             {
                 List<MyBlueprintDefinitionBase> blueprintDefinitions;
-                if (!Instance.TryGetBlueprintDefinitionsByResultId(request.Key, out blueprintDefinitions))
+                if (!Instance.TryGetBlueprintDefinitionsByResultId(request.DefinitionId, out blueprintDefinitions))
                 {
                     continue;
                 }
@@ -653,12 +626,12 @@ namespace CargoSorter
                         continue;
                     }
 
-                    if (request.Value.Amount < 1)
+                    if (request.Amount < 1)
                     {
                         continue;
                     }
 
-                    assembler.AddQueueItem(blueprint, request.Value.Amount);
+                    assembler.AddQueueItem(blueprint, request.Amount);
                     break;
                 }
             }
@@ -763,7 +736,7 @@ namespace CargoSorter
 
                 // foreach (var item in workData.Inventories)
                 // {
-                //     MyLog.Default.WriteLineAndConsole($"CargoSort: {item.Block.DisplayNameText}");
+                //     MyLog.Default.WriteLineAndConsole($"CargoSort: {item.Block.DisplayNameText}: {item.TypeRequests} {item.Requests?.Count}");
                 // }
 
                 BuildExcessItemPool(workData);
@@ -814,12 +787,12 @@ namespace CargoSorter
                         foreach (var request in inventoryInfo.Requests)
                         {
                             // Don't reserve for All containers
-                            if (request.Value.Flag == RequestFlags.All)
+                            if (request.Flag == RequestFlags.All)
                             {
                                 continue;
                             }
 
-                            workData.AvailableForDistribution[request.Key] = workData.AvailableForDistribution.GetValueOrDefault(request.Key) - request.Value.Amount;
+                            workData.AvailableForDistribution[request.DefinitionId] = workData.AvailableForDistribution.GetValueOrDefault(request.DefinitionId) - request.Amount;
                         }
                     }
 
@@ -1338,7 +1311,7 @@ namespace CargoSorter
                 return GetRequestAmount(inventoryInfo, definitionId, currentValue);
             }
 
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests != null && inventoryInfo.Requests.ContainsKey(definitionId))
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetRequestAmount(inventoryInfo, definitionId, currentValue)}");
                 return GetRequestAmount(inventoryInfo, definitionId, currentValue);
@@ -1389,27 +1362,28 @@ namespace CargoSorter
 
         private static MyFixedPoint GetRequestAmount(InventoryInfo inventoryInfo, MyDefinitionId definitionId, MyFixedPoint currentValue)
         {
-            RequestData requestInfo;
             if (inventoryInfo.Requests == null)
             {
                 return -currentValue;
             }
 
-            if (inventoryInfo.Requests.TryGetValue(definitionId, out requestInfo))
+            var requestIndex = inventoryInfo.Requests.FindIndex(r => r.DefinitionId == definitionId);
+            if (requestIndex == -1)
             {
-                var virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
-
-                if ((requestInfo.Flag <= RequestFlags.Max) ||
-                    (requestInfo.Flag == RequestFlags.Limit && virtualAmount > requestInfo.Amount) ||
-                    (requestInfo.Flag == RequestFlags.Minimum && virtualAmount < requestInfo.Amount))
-                {
-                    return MyFixedPoint.Min(inventoryInfo.ComputeAmountThatFits(definitionId, true), requestInfo.Amount - virtualAmount);
-                }
-
-                return MyFixedPoint.Zero;
+                return -currentValue;
             }
 
-            return -currentValue;
+            var requestInfo = inventoryInfo.Requests[requestIndex];
+            var virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+
+            if ((requestInfo.Flag <= RequestFlags.Max) ||
+                (requestInfo.Flag == RequestFlags.Limit && virtualAmount > requestInfo.Amount) ||
+                (requestInfo.Flag == RequestFlags.Minimum && virtualAmount < requestInfo.Amount))
+            {
+                return MyFixedPoint.Min(inventoryInfo.ComputeAmountThatFits(definitionId, true), requestInfo.Amount - virtualAmount);
+            }
+
+            return MyFixedPoint.Zero;
         }
 
         private static void AppendInventoryOperation(CargoSorterWorkData workData, InventoryMovement operation)
