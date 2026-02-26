@@ -653,6 +653,11 @@ namespace CargoSorter
                         continue;
                     }
 
+                    if (request.Value.Amount < 1)
+                    {
+                        continue;
+                    }
+
                     assembler.AddQueueItem(blueprint, request.Value.Amount);
                     break;
                 }
@@ -1160,65 +1165,69 @@ namespace CargoSorter
 
             if (typeRequests == TypeRequests.AssemblerIngots)
             {
-                var assembler = inventoryInfo.Block as IMyAssembler;
+                var assembler = inventoryInfo.Block as Sandbox.ModAPI.Ingame.IMyAssembler;
                 // Make sure the output inventory is clear in normal operation.
-                if (assembler != null && assembler.IsProducing && assembler.Enabled)
+                if (assembler == null || !assembler.IsProducing || !assembler.Enabled)
                 {
-                    MyInventoryConstraint constraintToCheck = null;
-                    switch (assembler.Mode)
+                    return -currentValue;
+                }
+
+                MyInventoryConstraint constraintToCheck = null;
+                if (assembler.Mode == Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly)
+                {
+                    if (inventoryInfo.RealInventory != assembler.InputInventory)
                     {
-                        case Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly:
-                            if (inventoryInfo.RealInventory != assembler.InputInventory)
-                            {
-                                // Always clear output side when assembling
-                                return -currentValue;
-                            }
-
-                            constraintToCheck = ((MyInventory)assembler.InputInventory)?.Constraint;
-                            break;
-                        case Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly:
-                            if (inventoryInfo.RealInventory != assembler.OutputInventory)
-                            {
-                                // Always clear input side when disassembling
-                                return -currentValue;
-                            }
-
-                            constraintToCheck = ((MyInventory)assembler.OutputInventory)?.Constraint;
-                            break;
+                        // Always clear output side when assembling
+                        return -currentValue;
                     }
 
-                    if (constraintToCheck != null && constraintToCheck.Check(definitionId))
+                    constraintToCheck = ((MyInventory)assembler.InputInventory)?.Constraint;
+                }
+                else if (assembler.Mode == Sandbox.ModAPI.Ingame.MyAssemblerMode.Disassembly)
+                {
+                    if (inventoryInfo.RealInventory != assembler.OutputInventory)
                     {
-                        var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
-                        MyFixedPoint newAmount = -currentValue;
-                        // Crawl the queue's blueprints to see if what we have is what we need, and get rid of stuff we don't need.
-                        foreach (var queuedItem in assembler.GetQueue())
+                        // Always clear input side when disassembling
+                        return -currentValue;
+                    }
+
+                    constraintToCheck = ((MyInventory)assembler.OutputInventory)?.Constraint;
+                }
+
+                if (constraintToCheck == null || !constraintToCheck.Check(definitionId))
+                {
+                    return -currentValue;
+                }
+
+                var efficiencyMultiplier = MyAPIGateway.Session.AssemblerEfficiencyMultiplier;
+                MyFixedPoint newAmount = -currentValue;
+                // Crawl the queue's blueprints to see if what we have is what we need, and get rid of stuff we don't need.
+                var items = new List<Sandbox.ModAPI.Ingame.MyProductionItem>();
+                assembler.GetQueue(items);
+                foreach (var queuedItem in items)
+                {
+                    var blueprint = MyDefinitionManager.Static.GetBlueprintDefinition(queuedItem.BlueprintId);
+                    if (blueprint == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var prerequisite in blueprint.Prerequisites)
+                    {
+                        if (prerequisite.Id != definitionId)
                         {
-                            var blueprint = queuedItem.Blueprint as MyBlueprintDefinitionBase;
-                            if (blueprint == null)
-                            {
-                                continue;
-                            }
-
-                            foreach (var prerequisite in blueprint.Prerequisites)
-                            {
-                                if (prerequisite.Id != definitionId)
-                                {
-                                    continue;
-                                }
-
-                                newAmount += prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
-                            }
+                            continue;
                         }
 
-                        // Let the assembler pull if it can and needs more so that there's no situation
-                        // where one assembler hogs all the material due to queued items.
-                        return assembler.UseConveyorSystem && newAmount > MyFixedPoint.Zero ? MyFixedPoint.Zero : newAmount;
+                        newAmount += prerequisite.Amount * queuedItem.Amount * (1 / efficiencyMultiplier);
                     }
                 }
 
+                // Let the assembler pull if it can and needs more so that there's no situation
+                // where one assembler hogs all the material due to queued items.
+                return assembler.UseConveyorSystem && newAmount > MyFixedPoint.Zero ? MyFixedPoint.Zero : newAmount;
+
                 // If the assembler is off or full somehow, just take everything out.
-                return -currentValue;
             }
 
             if (typeRequests == TypeRequests.RefineryOre)
@@ -2259,12 +2268,18 @@ namespace CargoSorter
                         }
                     }
 
+                    if (remainingToQueue < 1)
+                    {
+                        break;
+                    }
+
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
                     assembler.Block.InsertQueueItem(0, blueprintDefinition, assignedAmount);
                     // Reverse the absolute so that we "add" items to negative values
                     remainingToQueue -= remainingToQueue >= MyFixedPoint.Zero ? assignedAmount : -assignedAmount;
+
                     // Out of items to queue, go to next item
-                    if (remainingToQueue == MyFixedPoint.Zero)
+                    if (remainingToQueue < 1)
                     {
                         break;
                     }
