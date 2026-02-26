@@ -2233,6 +2233,18 @@ namespace CargoSorter
                     // Get the absolute quota amount here as it will be negative if this is a disassembly operation
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: remaining: {(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue)} Weighted: {MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount))}");
                     var assignedAmount = MyFixedPoint.Min(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue, MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount)));
+
+                    if (assignedAmount < 1)
+                    {
+                        continue;
+                    }
+
+                    // Disable co-op mode when queueing quotas. This will only disable coop mode on assemblers that are a part of a group.
+                    if (assembler.Block.Mode == Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly && assembler.Block.CooperativeMode)
+                    {
+                        assembler.Block.CooperativeMode = false;
+                    }
+
                     // Validity checked from the check during total weight determination
                     if (!assembler.Block.IsQueueEmpty)
                     {
