@@ -843,7 +843,7 @@ namespace CargoSorter
                         inventory.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId) || 
                         inventory.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId))
                     {
-                        bucketFlags |= InventoryBucketFlags.Broad;
+                        bucketFlags |= InventoryBucketFlags.Shuffle;
                     }
 
                     var buckets = workData.TypeBuckets[definitionId];
@@ -883,7 +883,7 @@ namespace CargoSorter
                     }
 
                     // Spreads go last
-                    return x.Flags.HasFlag(InventoryBucketFlags.Broad).CompareTo(y.Flags.HasFlag(InventoryBucketFlags.Broad));
+                    return x.Flags.HasFlag(InventoryBucketFlags.Shuffle).CompareTo(y.Flags.HasFlag(InventoryBucketFlags.Shuffle));
                 });
 
                 // MyLog.Default.WriteLineAndConsole($"CargoSort: {typeBuckets.Key}");
@@ -893,7 +893,7 @@ namespace CargoSorter
                     {
                         var comparison = 0;
                         // Compare by entityID and type hash to shuffle when using broad types
-                        if (bucket.Flags.HasFlag(InventoryBucketFlags.Broad))
+                        if (bucket.Flags.HasFlag(InventoryBucketFlags.Shuffle))
                         {
                             var xHash = 17;
                             xHash = xHash * 31 + x.Block.EntityId.GetHashCode();

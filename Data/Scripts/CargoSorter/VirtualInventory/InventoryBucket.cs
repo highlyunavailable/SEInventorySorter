@@ -8,7 +8,7 @@ namespace CargoSorter
     {
         None = 0,
         Special = 1 << 0,
-        Broad = 1 << 1,
+        Shuffle = 1 << 1,
     }
 
     internal class InventoryBucket
