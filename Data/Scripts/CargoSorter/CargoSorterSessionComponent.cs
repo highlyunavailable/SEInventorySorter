@@ -626,7 +626,7 @@ namespace CargoSorter
                         continue;
                     }
 
-                    if (request.Amount < 1)
+                    if (request.Amount == MyFixedPoint.Zero)
                     {
                         continue;
                     }
@@ -701,44 +701,7 @@ namespace CargoSorter
                     }
                 }
 
-                workData.Inventories.SortNoAlloc((x, y) =>
-                {
-                    // Blocks and specials go first
-                    if (x.TypeRequests.HasFlag(TypeRequests.Special) && !y.TypeRequests.HasFlag(TypeRequests.Special))
-                    {
-                        return -1;
-                    }
-
-                    if (!x.TypeRequests.HasFlag(TypeRequests.Special) && y.TypeRequests.HasFlag(TypeRequests.Special))
-                    {
-                        return 1;
-                    }
-
-                    // Priority applies next
-                    var comparison = x.Priority.CompareTo(y.Priority);
-                    if (comparison != 0)
-                    {
-                        return comparison;
-                    }
-
-                    // Sort by name so that the first items in the terminal tend to fill up first
-                    comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
-                    if (comparison == 0)
-                    {
-                        return x.Block.EntityId.CompareTo(y.Block.EntityId);
-                    }
-
-                    comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
-                    return comparison;
-
-                    // Use the entity ID as a fallback so it's fairly stable ordering
-                });
-
-                // foreach (var item in workData.Inventories)
-                // {
-                //     MyLog.Default.WriteLineAndConsole($"CargoSort: {item.Block.DisplayNameText}: {item.TypeRequests} {item.Requests?.Count}");
-                // }
-
+                OrderInventories(workData);
                 BuildExcessItemPool(workData);
                 BuildExcessItemMovement(workData);
                 BuildDesiredItemMovement(workData);
@@ -754,6 +717,7 @@ namespace CargoSorter
 
         private void GatherInventory(IEnumerable<IMyTerminalBlock> blocks, CargoSorterWorkData workData)
         {
+            var inventories = new List<InventoryInfo>();
             foreach (var block in blocks)
             {
                 if (!Util.IsValid(block) || block.InventoryCount == 0 || !block.HasLocalPlayerAccess() || IsIgnored(block))
@@ -770,7 +734,17 @@ namespace CargoSorter
                         continue;
                     }
 
-                    workData.Inventories.Add(inventoryInfo);
+                    inventories.Add(inventoryInfo);
+                    if (inventoryInfo.VirtualInventory?.Count > 0)
+                    {
+                        foreach (var definitionId in inventoryInfo.VirtualInventory.Keys)
+                        {
+                            if (!workData.TypeBuckets.ContainsKey(definitionId))
+                            {
+                                workData.TypeBuckets[definitionId] = new List<InventoryBucket>();
+                            }
+                        }
+                    }
 
                     if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.SorterItems) && (inventoryInfo.Block as IMyConveyorSorter)?.DrainAll == true)
                     {
@@ -847,6 +821,106 @@ namespace CargoSorter
                     }
                 }
             }
+
+            foreach (var inventory in inventories)
+            {
+                foreach (var definitionId in workData.TypeBuckets.Keys)
+                {
+                    if (inventory.Constraint != null && !inventory.Constraint.Check(definitionId))
+                    {
+                        continue;
+                    }
+
+                    var bucketFlags = InventoryBucketFlags.None;
+
+                    if (inventory.TypeRequests.HasFlag(TypeRequests.Special))
+                    {
+                        bucketFlags |= InventoryBucketFlags.Special;
+                    }
+
+                    if (inventory.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId) ||
+                        inventory.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId) || 
+                        inventory.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId) || 
+                        inventory.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId))
+                    {
+                        bucketFlags |= InventoryBucketFlags.Broad;
+                    }
+
+                    var buckets = workData.TypeBuckets[definitionId];
+                    var bucket = buckets.Find(b => b.Priority == inventory.Priority && b.Flags == bucketFlags);
+                    if (bucket == null)
+                    {
+                        bucket = new InventoryBucket(inventory.Priority, bucketFlags);
+                        buckets.Add(bucket);
+                    }
+
+                    bucket.Inventories.Add(inventory);
+                }
+            }
+        }
+
+        private static void OrderInventories(CargoSorterWorkData workData)
+        {
+            // MyLog.Default.WriteLineAndConsole($"CargoSort: Ordering accepted index");
+            var crc = new Crc32();
+            foreach (var typeBuckets in workData.TypeBuckets)
+            {
+                var typeHash = unchecked((int)crc.GetCrc(typeBuckets.Key.ToString()));
+                typeBuckets.Value.SortNoAlloc((x, y) =>
+                {
+                    // Specials go first
+                    var comparison = y.Flags.HasFlag(InventoryBucketFlags.Special).CompareTo(x.Flags.HasFlag(InventoryBucketFlags.Special));
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+
+                    // Priority applies next
+                    comparison = x.Priority.CompareTo(y.Priority);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+
+                    // Spreads go last
+                    return x.Flags.HasFlag(InventoryBucketFlags.Broad).CompareTo(y.Flags.HasFlag(InventoryBucketFlags.Broad));
+                });
+
+                // MyLog.Default.WriteLineAndConsole($"CargoSort: {typeBuckets.Key}");
+                foreach (var bucket in typeBuckets.Value)
+                {
+                    bucket.Inventories.SortNoAlloc((x, y) =>
+                    {
+                        var comparison = 0;
+                        // Compare by entityID and type hash to shuffle when using broad types
+                        if (bucket.Flags.HasFlag(InventoryBucketFlags.Broad))
+                        {
+                            var xHash = 17;
+                            xHash = xHash * 31 + x.Block.EntityId.GetHashCode();
+                            xHash = xHash * 31 + typeHash;
+
+                            var yHash = 17;
+                            yHash = yHash * 31 + y.Block.EntityId.GetHashCode();
+                            yHash = yHash * 31 + typeHash;
+
+                            comparison = xHash.CompareTo(yHash);
+                            if (comparison != 0)
+                            {
+                                return comparison;
+                            }
+                        }
+
+                        comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
+                        return comparison == 0 ? x.Block.EntityId.CompareTo(y.Block.EntityId) : comparison;
+                    });
+
+                    // MyLog.Default.WriteLineAndConsole($"CargoSort:   {bucket}");
+                    // foreach (var i in bucket.Inventories)
+                    // {
+                    //     MyLog.Default.WriteLineAndConsole($"CargoSort:     {i.Block.DisplayNameText}");
+                    // }
+                }
+            }
         }
 
         private bool IsIgnored(IMyTerminalBlock block)
@@ -864,18 +938,24 @@ namespace CargoSorter
 
         private void BuildExcessItemPool(CargoSorterWorkData workData)
         {
-            foreach (var inventory in workData.Inventories)
+            foreach (var typeBucket in workData.TypeBuckets)
             {
-                foreach (var item in inventory.VirtualInventory)
+                foreach (var bucket in typeBucket.Value)
                 {
-                    var excess = -CalculateAmountWanted(inventory, item.Key, item.Value, workData);
-                    if (excess <= MyFixedPoint.Zero)
+                    foreach (var inventory in bucket.Inventories)
                     {
-                        continue;
-                    }
+                        foreach (var item in inventory.VirtualInventory)
+                        {
+                            var excess = -CalculateAmountWanted(inventory, item.Key, item.Value, workData);
+                            if (excess <= MyFixedPoint.Zero)
+                            {
+                                continue;
+                            }
 
-                    var pool = workData.ExcessPools.GetValueOrNew(item.Key);
-                    pool.Add(new ExcessInfo(inventory, excess));
+                            var pool = workData.ExcessPools.GetValueOrNew(item.Key);
+                            pool.Add(new ExcessInfo(inventory, excess));
+                        }
+                    }
                 }
             }
 
@@ -888,105 +968,102 @@ namespace CargoSorter
 
         private void BuildExcessItemMovement(CargoSorterWorkData workData)
         {
-            var poolKeys = workData.ExcessPools.Keys.ToList();
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: Removing excess items");
-            for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
+            // MyLog.Default.WriteLineAndConsole($"CargoSort (EXCESS): Removing excess items");
+            foreach (var typeBucket in workData.TypeBuckets)
             {
-                var destInventory = workData.Inventories[destInvIndex];
-                if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInventory.IsSatisfied)
+                foreach (var bucket in typeBucket.Value)
                 {
-                    continue;
-                }
-
-                VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
-
-                IEnumerable<MyDefinitionId> keysToCheck;
-                if (destInventory.Constraint != null && destInventory.Constraint.ConstrainedTypes.Count == 0 && destInventory.Constraint.ConstrainedIds.Count < workData.ExcessPools.Count)
-                {
-                    keysToCheck = destInventory.Constraint.ConstrainedIds;
-                }
-                else
-                {
-                    keysToCheck = poolKeys;
-                }
-
-                foreach (var poolKey in keysToCheck)
-                {
-                    List<ExcessInfo> pools;
-                    if (!workData.ExcessPools.TryGetValue(poolKey, out pools))
+                    foreach (var destInventory in bucket.Inventories)
                     {
-                        continue;
-                    }
-
-                    if (pools.Count == 0)
-                    {
-                        workData.ExcessPools.Remove(poolKey);
-                        continue;
-                    }
-
-                    var destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(poolKey);
-                    var amountWanted = CalculateAmountWanted(destInventory, poolKey, destCurrentAmount, workData);
-                    // We don't want this item or we can't fit any more
-                    if (amountWanted <= MyFixedPoint.Zero)
-                    {
-                        continue;
-                    }
-
-                    for (int i = pools.Count - 1; i >= 0; i--)
-                    {
-                        var inventoryExcess = pools[i];
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Excess AmountToBeMoved");
-                        MyFixedPoint amountToBeMoved = MyFixedPoint.Min(amountWanted, inventoryExcess.Amount);
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {pool.Key}: {amountToBeMoved} amountWanted {amountWanted}");
-                        if (amountToBeMoved <= MyFixedPoint.Zero)
-                        {
-                            break;
-                        }
-
-                        MyFixedPoint volumeToBeMoved;
-                        MyFixedPoint massToBeMoved;
-                        if (!destInventory.CanItemsFit(amountToBeMoved, poolKey, out volumeToBeMoved, out massToBeMoved))
-                        {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {pool.Key} with amount {amountToBeMoved} to inventory");
-                            break;
-                        }
-
-                        var sourceInventory = inventoryExcess.Inventory;
-                        VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
-
-                        if (sourceInventory.VirtualInventory.GetValueOrDefault(poolKey) < amountToBeMoved)
-                        {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Source inventory {sourceInventory.Block?.DisplayNameText} is missing {pool.Key} with amount {amountToBeMoved} to inventory");
-                            continue;
-                        }
-
-                        if (destInventory.SupportsConveyors && sourceInventory.SupportsConveyors && !sourcePBInv.CanTransferItemTo(destPBInv, poolKey))
+                        if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInventory.IsSatisfied)
                         {
                             continue;
                         }
 
-                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
-                        AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, poolKey, amountToBeMoved, volumeToBeMoved, massToBeMoved));
-                        // Decrement the excess pool.
-                        if (inventoryExcess.Amount <= amountToBeMoved)
+                        VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
+                        // MyLog.Default.WriteLineAndConsole($"CargoSort (EXCESS): Inv destination: {typeBucket.Key} {bucket} {destInventory.Block?.DisplayNameText}");
+
+                        List<ExcessInfo> pools;
+                        if (!workData.ExcessPools.TryGetValue(typeBucket.Key, out pools))
                         {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Pool {pool.Key} source {sourceInventory.Block?.DisplayNameText} empty, removing");
-                            pools.RemoveAtFast(i);
-                        }
-                        else
-                        {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Pool {pool.Key} source {sourceInventory.Block?.DisplayNameText} lost some but not all, now {inventoryExcess.Item2}");
-                            inventoryExcess.Amount -= amountToBeMoved;
-                            pools[i] = inventoryExcess;
+                            continue;
                         }
 
-                        // Recalculate how much is needed and bail out of we don't want any more
-                        destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(poolKey);
-                        amountWanted = CalculateAmountWanted(destInventory, poolKey, destCurrentAmount, workData);
+                        if (pools.Count == 0)
+                        {
+                            workData.ExcessPools.Remove(typeBucket.Key);
+                            if (workData.ExcessPools.Count == 0)
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort (EXCESS): No more excess items");
+                                return;
+                            }
+
+                            continue;
+                        }
+
+                        var destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(typeBucket.Key);
+                        var amountWanted = CalculateAmountWanted(destInventory, typeBucket.Key, destCurrentAmount, workData);
+                        // We don't want this item or we can't fit any more
                         if (amountWanted <= MyFixedPoint.Zero)
                         {
-                            break;
+                            continue;
+                        }
+
+                        for (var i = pools.Count - 1; i >= 0; i--)
+                        {
+                            var inventoryExcess = pools[i];
+                            // MyLog.Default.WriteLineAndConsole($"CargoSort (EXCESS): Remaining pools ({typeBucket.Key}): {pools.Count}");
+                            var amountToBeMoved = MyFixedPoint.Min(amountWanted, inventoryExcess.Amount);
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {pool.Key}: {amountToBeMoved} amountWanted {amountWanted}");
+                            if (amountToBeMoved <= MyFixedPoint.Zero)
+                            {
+                                break;
+                            }
+
+                            MyFixedPoint volumeToBeMoved;
+                            MyFixedPoint massToBeMoved;
+                            if (!destInventory.CanItemsFit(amountToBeMoved, typeBucket.Key, out volumeToBeMoved, out massToBeMoved))
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {pool.Key} with amount {amountToBeMoved} to inventory");
+                                break;
+                            }
+
+                            var sourceInventory = inventoryExcess.Inventory;
+                            VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
+
+                            if (sourceInventory.VirtualInventory.GetValueOrDefault(typeBucket.Key) < amountToBeMoved)
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Source inventory {sourceInventory.Block?.DisplayNameText} is missing {pool.Key} with amount {amountToBeMoved} to inventory");
+                                continue;
+                            }
+
+                            if (destInventory.SupportsConveyors && sourceInventory.SupportsConveyors && !sourcePBInv.CanTransferItemTo(destPBInv, typeBucket.Key))
+                            {
+                                continue;
+                            }
+
+                            // MyLog.Default.WriteLineAndConsole($"CargoSort (EXCESS): Inv source: {typeBucket.Key} {bucket} {sourceInventory.Block?.DisplayNameText}");
+                            AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, typeBucket.Key, amountToBeMoved, volumeToBeMoved, massToBeMoved));
+                            // Decrement the excess pool.
+                            if (inventoryExcess.Amount <= amountToBeMoved)
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Pool {pool.Key} source {sourceInventory.Block?.DisplayNameText} empty, removing");
+                                pools.RemoveAtFast(i);
+                            }
+                            else
+                            {
+                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Pool {pool.Key} source {sourceInventory.Block?.DisplayNameText} lost some but not all, now {inventoryExcess.Item2}");
+                                inventoryExcess.Amount -= amountToBeMoved;
+                                pools[i] = inventoryExcess;
+                            }
+
+                            // Recalculate how much is needed and bail out of we don't want any more
+                            destCurrentAmount = destInventory.VirtualInventory.GetValueOrDefault(typeBucket.Key);
+                            amountWanted = CalculateAmountWanted(destInventory, typeBucket.Key, destCurrentAmount, workData);
+                            if (amountWanted <= MyFixedPoint.Zero)
+                            {
+                                break;
+                            }
                         }
                     }
                 }
@@ -996,102 +1073,94 @@ namespace CargoSorter
         private void BuildDesiredItemMovement(CargoSorterWorkData workData)
         {
             // MyLog.Default.WriteLineAndConsole($"CargoSort: Moving desired items");
-            List<MyDefinitionId> inventoryKeys = new List<MyDefinitionId>();
-            for (int sourceInvIndex = workData.Inventories.Count - 1; sourceInvIndex >= 0; sourceInvIndex--)
+            foreach (var typeBucket in workData.TypeBuckets)
             {
-                var sourceInventory = workData.Inventories[sourceInvIndex];
-                VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
-                // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {sourceInventory.Block?.DisplayNameText}");
-                if (sourceInventory.VirtualInventory.Count == 0) // Nothing to transfer out
+                for (int sourceBucketIndex = typeBucket.Value.Count - 1; sourceBucketIndex >= 0; sourceBucketIndex--)
                 {
-                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping due to no items");
-                    continue;
-                }
-
-                // Don't steal items from draining conveyor sorters, they'll just take them back.
-                if (sourceInventory.TypeRequests.HasFlag(TypeRequests.SorterItems) && (sourceInventory.Block as IMyConveyorSorter)?.DrainAll == true)
-                {
-                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
-                    continue;
-                }
-
-                inventoryKeys.Clear();
-                inventoryKeys.AddRange(sourceInventory.VirtualInventory.Keys);
-                for (int destInvIndex = 0; destInvIndex < workData.Inventories.Count; destInvIndex++)
-                {
-                    if (sourceInventory.VirtualInventory.Count == 0)
+                    var sourceBucket = typeBucket.Value[sourceBucketIndex];
+                    for (int sourceInvIndex = sourceBucket.Inventories.Count - 1; sourceInvIndex >= 0; sourceInvIndex--)
                     {
-                        break;
-                    }
+                        var sourceInventory = sourceBucket.Inventories[sourceInvIndex];
+                        VRage.Game.ModAPI.Ingame.IMyInventory sourcePBInv = sourceInventory.RealInventory;
+                        MyFixedPoint virtualAmount;
+                        // Nothing to transfer out
+                        if (!sourceInventory.VirtualInventory.TryGetValue(typeBucket.Key, out virtualAmount) || virtualAmount <= MyFixedPoint.Zero)
+                        {
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping source due to no items");
+                            continue;
+                        }
 
-                    var destInventory = workData.Inventories[destInvIndex];
-                    if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInventory.IsSatisfied || destInvIndex == sourceInvIndex)
-                    {
+                        // Don't steal items from draining conveyor sorters, they'll just take them back.
+                        if (sourceInventory.TypeRequests.HasFlag(TypeRequests.SorterItems) && (sourceInventory.Block as IMyConveyorSorter)?.DrainAll == true)
+                        {
+                            // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping a conveyor sorter that's in drain mode type flags {sourceInventory.TypeRequests}");
+                            continue;
+                        }
+
+                        // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {typeBucket.Key} {sourceBucket} {sourceInventory.Block?.DisplayNameText}");
+                        for (var index = 0; index < typeBucket.Value.Count; index++)
+                        {
+                            var destBucket = typeBucket.Value[index];
+                            foreach (var destInventory in destBucket.Inventories)
+                            {
+                                if (sourceInventory == destInventory)
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Source inv is same as dest inv, moving on: {destInventory.Block?.DisplayNameText}");
+                                    goto nextInventory;
+                                }
+
+                                if (destInventory.TypeRequests.Equals(TypeRequests.Nothing) || destInventory.IsSatisfied)
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Dest is satisfied, continuing: {destInventory.Block?.DisplayNameText}");
+                                    continue;
+                                }
+
+                                if (sourceBucket.Flags.HasFlag(InventoryBucketFlags.Special) && (!Config.AllowSpecialSteal || !destBucket.Flags.HasFlag(InventoryBucketFlags.Special)))
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
+                                    continue;
+                                }
+
+                                if (!sourceInventory.VirtualInventory.TryGetValue(typeBucket.Key, out virtualAmount) || virtualAmount <= MyFixedPoint.Zero)
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping dest due to no remaining items: {destInventory.Block?.DisplayNameText}");
+                                    goto nextInventory;
+                                }
+
+                                VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
+
+                                // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv dest: {typeBucket.Key} {destBucket} {destInventory.Block?.DisplayNameText}");
+                                var amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, typeBucket.Key, virtualAmount, workData), virtualAmount);
+                                // MyLog.Default.WriteLineAndConsole($"CargoSort: Wanted: {CalculateAmountWanted(destInventory, typeBucket.Key, virtualAmount, workData)} | {virtualAmount}");
+                                if (amountToBeMoved <= MyFixedPoint.Zero)
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping dest due to zero movement: {destInventory.Block?.DisplayNameText}");
+                                    continue;
+                                }
+
+                                if (destInventory.SupportsConveyors && sourceInventory.SupportsConveyors && !sourcePBInv.CanTransferItemTo(destPBInv, typeBucket.Key))
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping dest due to conveyor failure: {destInventory.Block?.DisplayNameText}");
+                                    continue;
+                                }
+
+                                // MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
+
+                                MyFixedPoint volumeToBeMoved;
+                                MyFixedPoint massToBeMoved;
+                                if (!destInventory.CanItemsFit(amountToBeMoved, typeBucket.Key, out volumeToBeMoved, out massToBeMoved))
+                                {
+                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping dest due to not fitting: {destInventory.Block?.DisplayNameText}");
+                                    continue;
+                                }
+
+                                sourceInventory.IsSatisfied = false;
+                                AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, typeBucket.Key, amountToBeMoved, volumeToBeMoved, massToBeMoved));
+                            }
+                        }
+
+                        nextInventory:
                         continue;
-                    }
-
-                    var sourceSpecial = sourceInventory.TypeRequests.HasFlag(TypeRequests.Special);
-                    var destSpecial = destInventory.TypeRequests.HasFlag(TypeRequests.Special);
-
-                    if (sourceSpecial && (!Config.AllowSpecialSteal || !destSpecial))
-                    {
-                        // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
-                        continue;
-                    }
-
-                    // If they're both special or nonspecial then apply priority, otherwise we probably need to take
-                    // from a higher priority normal container to satisfy a lower priority special container.
-                    if (sourceSpecial == destSpecial && (sourceInventory.Priority <= destInventory.Priority))
-                    {
-                        continue;
-                    }
-
-                    VRage.Game.ModAPI.Ingame.IMyInventory destPBInv = destInventory.RealInventory;
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination: {destInventory.Block?.DisplayNameText}");
-
-                    IEnumerable<MyDefinitionId> keysToCheck;
-                    if (destInventory.Constraint != null && destInventory.Constraint.ConstrainedTypes.Count == 0 && destInventory.Constraint.ConstrainedIds.Count < inventoryKeys.Count)
-                    {
-                        keysToCheck = destInventory.Constraint.ConstrainedIds;
-                    }
-                    else
-                    {
-                        keysToCheck = inventoryKeys;
-                    }
-
-                    foreach (var virtualItemKey in keysToCheck)
-                    {
-                        MyFixedPoint virtualItemValue;
-                        if (!sourceInventory.VirtualInventory.TryGetValue(virtualItemKey, out virtualItemValue) || virtualItemValue <= MyFixedPoint.Zero)
-                        {
-                            continue;
-                        }
-
-                        // MyLog.Default.WriteLineAndConsole($"CargoSort: CalculateAmountWanted: Desired AmountToBeMoved");
-                        MyFixedPoint amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, virtualItemKey, virtualItemValue, workData), virtualItemValue);
-
-                        if (amountToBeMoved <= MyFixedPoint.Zero)
-                        {
-                            continue;
-                        }
-
-                        if (destInventory.SupportsConveyors && sourceInventory.SupportsConveyors && !sourcePBInv.CanTransferItemTo(destPBInv, virtualItemKey))
-                        {
-                            continue;
-                        }
-
-                        // MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {virtualItemKey}: {amountToBeMoved}");
-
-                        MyFixedPoint volumeToBeMoved;
-                        MyFixedPoint massToBeMoved;
-                        if (!destInventory.CanItemsFit(amountToBeMoved, virtualItemKey, out volumeToBeMoved, out massToBeMoved))
-                        {
-                            // MyLog.Default.WriteLineAndConsole($"CargoSort: Could not add {virtualItemKey} with amount {amountToBeMoved} to inventory");
-                            continue;
-                        }
-
-                        sourceInventory.IsSatisfied = false;
-                        AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, virtualItemKey, amountToBeMoved, volumeToBeMoved, massToBeMoved));
                     }
                 }
             }
@@ -1311,7 +1380,8 @@ namespace CargoSorter
                 return GetRequestAmount(inventoryInfo, definitionId, currentValue);
             }
 
-            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited))
+            // The check for null requests and findindex lets this fall through to next if there's no request that matches.
+            if (inventoryInfo.TypeRequests.HasFlag(TypeRequests.Limited) && inventoryInfo.Requests != null && inventoryInfo.Requests.FindIndex(r => r.DefinitionId == definitionId) > -1)
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Limited request amount {definitionId} {GetRequestAmount(inventoryInfo, definitionId, currentValue)}");
                 return GetRequestAmount(inventoryInfo, definitionId, currentValue);
@@ -1376,7 +1446,7 @@ namespace CargoSorter
             var requestInfo = inventoryInfo.Requests[requestIndex];
             var virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
-            if ((requestInfo.Flag <= RequestFlags.Max) ||
+            if (requestInfo.Flag <= RequestFlags.Max ||
                 (requestInfo.Flag == RequestFlags.Limit && virtualAmount > requestInfo.Amount) ||
                 (requestInfo.Flag == RequestFlags.Minimum && virtualAmount < requestInfo.Amount))
             {
@@ -1405,6 +1475,7 @@ namespace CargoSorter
             MyFixedPoint destChangedAmount = operation.Destination.VirtualInventory.GetValueOrDefault(operation.Item) + operation.Amount;
             operation.Destination.VirtualInventory[operation.Item] = destChangedAmount;
             workData.MovementData.Add(operation);
+            // MyLog.Default.WriteLineAndConsole($"CargoSort: Added operation: {operation.Source.Block?.DisplayNameText} -> {operation.Destination.Block?.DisplayNameText} | {operation.Amount} {operation.Item}");
         }
 
         private void SortInventoryCallback(WorkData data)
@@ -1433,28 +1504,50 @@ namespace CargoSorter
         private void DisplaySortResults(CargoSorterWorkData workData, int transferRequestCount)
         {
             var validationFailedBlocks = new Dictionary<IMyCubeBlock, ValueTuple<RequestValidationStatus, MyIniParseResult>>();
-            foreach (var inventory in workData.Inventories)
+            foreach (var typeBucket in workData.TypeBuckets)
             {
-                if (inventory.RequestStatus == RequestValidationStatus.Valid || !Util.IsValid(inventory.Block))
+                foreach (var inventoryBucket in typeBucket.Value)
                 {
-                    continue;
-                }
+                    foreach (var inventory in inventoryBucket.Inventories)
+                    {
+                        if (inventory.RequestStatus == RequestValidationStatus.Valid || !Util.IsValid(inventory.Block))
+                        {
+                            continue;
+                        }
 
-                validationFailedBlocks[inventory.Block] = new ValueTuple<RequestValidationStatus, MyIniParseResult>(inventory.RequestStatus, inventory.ConfigParseResult);
+                        validationFailedBlocks[inventory.Block] = new ValueTuple<RequestValidationStatus, MyIniParseResult>(inventory.RequestStatus, inventory.ConfigParseResult);
+                    }
+                }
             }
+
+            var duration = (DateTime.UtcNow - workData.StartTime).TotalSeconds;
 
             switch (workData.ResultsType)
             {
                 case ResultsDisplayType.Chat:
                     if (Config.ShowProgressNotifications)
                     {
-                        if (transferRequestCount == 0)
+                        if (duration > 0.5)
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", "No transfers needed.");
+                            if (transferRequestCount == 0)
+                            {
+                                MyAPIGateway.Utilities.ShowMessage("Sorter", $"No transfers needed ({Math.Round((DateTime.UtcNow - workData.StartTime).TotalSeconds, 2)}s).");
+                            }
+                            else
+                            {
+                                MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequestCount} transfers requested ({Math.Round((DateTime.UtcNow - workData.StartTime).TotalSeconds, 2)}s).");
+                            }
                         }
                         else
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequestCount} transfers requested.");
+                            if (transferRequestCount == 0)
+                            {
+                                MyAPIGateway.Utilities.ShowMessage("Sorter", $"No transfers needed.");
+                            }
+                            else
+                            {
+                                MyAPIGateway.Utilities.ShowMessage("Sorter", $"{transferRequestCount} transfers requested.");
+                            }
                         }
                     }
 
@@ -1532,7 +1625,7 @@ namespace CargoSorter
                                 }
 
                                 int itemCount;
-                                if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                 {
                                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
                                 }
@@ -1638,7 +1731,7 @@ namespace CargoSorter
                                     }
 
                                     int itemCount;
-                                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                    if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                     {
                                         warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
                                     }
@@ -1673,6 +1766,12 @@ namespace CargoSorter
                     else
                     {
                         displayStringBuilder.AppendFormat("{0} transfers requested.", transferRequestCount);
+                    }
+
+                    if (duration > 0.5)
+                    {
+                        displayStringBuilder.AppendLine();
+                        displayStringBuilder.AppendFormat("Duration: {0}s", Math.Round((DateTime.UtcNow - workData.StartTime).TotalSeconds, 2));
                     }
 
                     if (groups.Count > 0 || warningsBuilder != null)
@@ -2079,8 +2178,9 @@ namespace CargoSorter
             for (int qi = workData.QuotaInfo.QuotaItems.Count - 1; qi >= 0; qi--)
             {
                 var quotaItem = workData.QuotaInfo.QuotaItems[qi];
-                MyFixedPoint missingItemCount = workData.MissingItems.GetValueOrDefault(quotaItem.ItemId);
-                MyFixedPoint remainingToQueue = missingItemCount;
+                var missingItemCount = workData.MissingItems.GetValueOrDefault(quotaItem.ItemId);
+                var disassembling = missingItemCount < MyFixedPoint.Zero;
+                var remainingToQueue = MyFixedPoint.Floor(disassembling ? -missingItemCount : missingItemCount);
 
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Starting Remaining To Queue: {remainingToQueue}");
 
@@ -2114,7 +2214,7 @@ namespace CargoSorter
                     if (workData.MarkedForDisassembly.Contains(assembler.Block))
                     {
                         // This assembler is for disassembly, and therefore cannot be used to assemble.
-                        if (remainingToQueue > MyFixedPoint.Zero)
+                        if (!disassembling)
                         {
                             //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.DisplayNameText} is disassembling, skipping for assembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
                             availableAssemblers.RemoveAtFast(ai);
@@ -2124,7 +2224,7 @@ namespace CargoSorter
                     else
                     {
                         // This assembler is for assembly, and therefore cannot be used to disassemble.
-                        if (remainingToQueue < MyFixedPoint.Zero)
+                        if (disassembling)
                         {
                             //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.DisplayNameText} is assembling, skipping for disassembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
                             availableAssemblers.RemoveAtFast(ai);
@@ -2150,17 +2250,19 @@ namespace CargoSorter
                     if (blueprintDefinition != null)
                     {
                         totalWeight += assembler.AssemblerWeight;
-                        if (!assembler.Block.IsQueueEmpty)
+                        if (assembler.Block.IsQueueEmpty)
                         {
-                            var queue = assembler.Block.GetQueue();
-                            for (int i = queue.Count - 1; i >= 0; i--)
+                            continue;
+                        }
+
+                        var queue = assembler.Block.GetQueue();
+                        for (int i = queue.Count - 1; i >= 0; i--)
+                        {
+                            var queueItem = queue[i];
+                            var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
+                            if (queuedBlueprint == blueprintDefinition)
                             {
-                                var queueItem = queue[i];
-                                var queuedBlueprint = queueItem.Blueprint as MyBlueprintDefinitionBase;
-                                if (queuedBlueprint == blueprintDefinition)
-                                {
-                                    remainingToQueue -= MyFixedPoint.Min(queueItem.Amount, remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue);
-                                }
+                                remainingToQueue -= MyFixedPoint.Min(queueItem.Amount, remainingToQueue);
                             }
                         }
                     }
@@ -2204,11 +2306,11 @@ namespace CargoSorter
                         }
                     }
 
-                    // Get the absolute quota amount here as it will be negative if this is a disassembly operation
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: remaining: {(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue)} Weighted: {MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount))}");
-                    var assignedAmount = MyFixedPoint.Min(remainingToQueue >= MyFixedPoint.Zero ? remainingToQueue : -remainingToQueue, MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (missingItemCount >= MyFixedPoint.Zero ? missingItemCount : -missingItemCount)));
+                    var weightedPortion = MyFixedPoint.Ceiling(assembler.AssemblerWeight / totalWeight * (disassembling ? -missingItemCount : missingItemCount));
+                    var assignedAmount = MyFixedPoint.Min(remainingToQueue, weightedPortion);
 
-                    if (assignedAmount < 1)
+                    if (assignedAmount == MyFixedPoint.Zero)
                     {
                         continue;
                     }
@@ -2233,39 +2335,39 @@ namespace CargoSorter
                             }
                             else
                             {
-                                if (assembler.ClearQueue)
+                                if (!assembler.ClearQueue)
                                 {
-                                    bool hasAnyItem = false;
-                                    foreach (var result in queuedBlueprint.Results)
+                                    continue;
+                                }
+
+                                var hasAnyItem = false;
+                                foreach (var result in queuedBlueprint.Results)
+                                {
+                                    if (!workData.MissingItems.ContainsKey(result.Id))
                                     {
-                                        if (workData.MissingItems.ContainsKey(result.Id))
-                                        {
-                                            hasAnyItem = true;
-                                            break;
-                                        }
+                                        continue;
                                     }
 
-                                    if (!hasAnyItem)
-                                    {
-                                        assembler.Block.RemoveQueueItem(i, queueItem.Amount);
-                                    }
+                                    hasAnyItem = true;
+                                    break;
+                                }
+
+                                if (!hasAnyItem)
+                                {
+                                    assembler.Block.RemoveQueueItem(i, queueItem.Amount);
                                 }
                             }
                         }
                     }
 
-                    if (remainingToQueue < 1)
+                    if (assignedAmount > MyFixedPoint.Zero)
                     {
-                        break;
+                        assembler.Block.InsertQueueItem(0, blueprintDefinition, assignedAmount);
+                        remainingToQueue -= assignedAmount;
                     }
 
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Assigned {assignedAmount} of {quotaItem.ItemId} to {assembler.Block.DisplayNameText}");
-                    assembler.Block.InsertQueueItem(0, blueprintDefinition, assignedAmount);
-                    // Reverse the absolute so that we "add" items to negative values
-                    remainingToQueue -= remainingToQueue >= MyFixedPoint.Zero ? assignedAmount : -assignedAmount;
-
                     // Out of items to queue, go to next item
-                    if (remainingToQueue < 1)
+                    if (remainingToQueue == MyFixedPoint.Zero)
                     {
                         break;
                     }
@@ -2325,7 +2427,7 @@ namespace CargoSorter
                                         var value = ini.Get(iniKey);
                                         var valueString = value.ToString();
                                         int itemCount;
-                                        if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                        if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                         {
                                             MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.DisplayNameText}'");
                                         }
@@ -2379,7 +2481,7 @@ namespace CargoSorter
                                         var value = ini.Get(iniKey);
                                         var valueString = value.ToString();
                                         int itemCount;
-                                        if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                        if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                         {
                                             warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
                                         }

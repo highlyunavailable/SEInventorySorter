@@ -9,6 +9,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.ObjectBuilders;
 using VRage.Utils;
 
 namespace CargoSorter
@@ -43,6 +44,26 @@ namespace CargoSorter
             MaxVolume = realInventory.MaxVolume;
             MaxMass = realInventory.MaxMass;
             Constraint = realInventory.Constraint;
+
+            if (Constraint == null && Block is IMyConveyorSorter)
+            {
+                var sorter = Block as IMyConveyorSorter;
+                Constraint = new MyInventoryConstraint(string.Empty, null, sorter.Mode == Sandbox.ModAPI.Ingame.MyConveyorSorterMode.Whitelist);
+                var filterList = new List<Sandbox.ModAPI.Ingame.MyInventoryItemFilter>();
+                sorter.GetFilterList(filterList);
+                foreach (var filter in filterList)
+                {
+                    if (filter.AllSubTypes)
+                    {
+                        Constraint.AddObjectBuilderType(filter.ItemId.TypeId);
+                    }
+                    else
+                    {
+                        Constraint.Add(filter.ItemId);
+                    }
+                }
+            }
+
             RealInventory = realInventory;
             // Require conveyors for weapons always since some weapons are balanced by being manually reloadable only.
             SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
@@ -126,14 +147,21 @@ namespace CargoSorter
 
             if (sectionName != "Inventory" && Block.CustomData.InsensitiveContains(sectionName))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort ({profile}): {Block.DisplayNameText}");
                 TypeRequests = TypeRequests.Special;
                 ConfigParseResult = ParseCustomDataRequests(sectionName);
             }
 
-            if (Requests != null && Requests.Count > 0)
+            // if (Requests != null && Requests.Count > 0)
+            // {
+            //     foreach (var request in Requests)
+            //     {
+            //         MyLog.Default.WriteLineAndConsole($"CargoSort ({Block.DisplayNameText}): {request.DefinitionId} {request.Amount} {request.Flag}");
+            //     }
+            // }
+
+            if ((TypeRequests == TypeRequests.Special || TypeRequests == TypeRequests.Limited) && Requests != null && Requests.Count > 0)
             {
-                if (!CanRequestsFit(Requests, realInventory.MaxVolume, realInventory.MaxMass, realInventory.MaxItemCount, realInventory.Constraint))
+                if (!CheckRequestFit(Requests, realInventory.MaxVolume, realInventory.MaxMass, realInventory.MaxItemCount, realInventory.Constraint))
                 {
                     RequestStatus |= RequestValidationStatus.TooMuchVolume;
                 }
@@ -148,7 +176,7 @@ namespace CargoSorter
                     }
 
                     var currentAmount = VirtualInventory.GetValueOrDefault(request.DefinitionId);
-                    if (request.Flag == RequestFlags.None || request.Flag == RequestFlags.Max)
+                    if (request.Flag == RequestFlags.None || request.Flag == RequestFlags.Max || request.Flag == RequestFlags.Percent)
                     {
                         if (currentAmount == request.Amount)
                         {
@@ -291,7 +319,7 @@ namespace CargoSorter
             //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
         }
 
-        private bool CanRequestsFit(List<RequestData> requests, MyFixedPoint maxVolume, MyFixedPoint maxMass, int maxItemCount, MyInventoryConstraint constraint)
+        private bool CheckRequestFit(List<RequestData> requests, MyFixedPoint maxVolume, MyFixedPoint maxMass, int maxItemCount, MyInventoryConstraint constraint)
         {
             if (requests.Count > maxItemCount)
             {
@@ -324,6 +352,22 @@ namespace CargoSorter
                     else if (request.Flag == RequestFlags.Max)
                     {
                         amount = ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts, (float)sumVolume, (float)sumMass);
+                        if (amount == MyFixedPoint.Zero)
+                        {
+                            return false;
+                        }
+
+                        request.Amount = amount;
+                        requests[index] = request;
+                    }
+                    else if (request.Flag == RequestFlags.Percent)
+                    {
+                        amount = (MyFixedPoint)((double)ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts) * ((double)request.Amount / 100.0));
+                        if (hasIntegralAmounts)
+                        {
+                            amount = MyFixedPoint.Floor(amount);
+                        }
+
                         if (amount == MyFixedPoint.Zero)
                         {
                             return false;
@@ -443,7 +487,7 @@ namespace CargoSorter
                     }
 
                     int itemCount;
-                    if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                    if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                     {
                         RequestStatus |= RequestValidationStatus.InvalidCount;
                         continue;
@@ -459,6 +503,15 @@ namespace CargoSorter
                     else if (lastChar == 'M' || lastChar == 'm')
                     {
                         requestValue.Flag = RequestFlags.Minimum;
+                    }
+                    else if (lastChar == '%')
+                    {
+                        if (itemCount > 100)
+                        {
+                            RequestStatus |= RequestValidationStatus.InvalidCount;
+                            continue;
+                        }
+                        requestValue.Flag = RequestFlags.Percent;
                     }
 
                     specificIndex++;

@@ -7,6 +7,7 @@ namespace CargoSorter
     {
         None,
         All,
+        Percent,
         Max,
         Minimum,
         Limit,

@@ -137,7 +137,7 @@ namespace CargoSorter
                 }
 
                 int itemCount;
-                if (!int.TryParse(valueString.TrimEnd('l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                 {
                     RequestStatus |= RequestValidationStatus.InvalidCount;
                     continue;

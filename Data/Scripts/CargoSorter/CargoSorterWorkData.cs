@@ -17,14 +17,15 @@ namespace CargoSorter
     }
     public class CargoSorterWorkData : WorkData
     {
+        internal readonly DateTime StartTime = DateTime.UtcNow;
         internal readonly ResultsDisplayType ResultsType;
-        internal readonly List<InventoryInfo> Inventories = new List<InventoryInfo>();
         internal readonly List<InventoryMovement> MovementData = new List<InventoryMovement>();
         internal readonly IMyCubeGrid RootGrid;
         internal readonly bool ConstructOnly;
         internal readonly Dictionary<MyDefinitionId, MyFixedPoint> AvailableForDistribution = new Dictionary<MyDefinitionId, MyFixedPoint>();
         internal readonly Dictionary<ValueTuple<TypeRequests, MyDefinitionId>, int> RequestTypeCount = new Dictionary<ValueTuple<TypeRequests, MyDefinitionId>, int>();
         internal readonly Dictionary<MyDefinitionId, List<ExcessInfo>> ExcessPools = new Dictionary<MyDefinitionId, List<ExcessInfo>>();
+        internal readonly Dictionary<MyDefinitionId, List<InventoryBucket>> TypeBuckets = new Dictionary<MyDefinitionId, List<InventoryBucket>>();
         internal readonly string SectionName;
 
         public CargoSorterWorkData(IMyCubeGrid cubeGrid, string profile,  bool constructOnly, ResultsDisplayType resultsDisplayType = ResultsDisplayType.Chat)
