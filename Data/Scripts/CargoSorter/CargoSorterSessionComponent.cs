@@ -699,6 +699,7 @@ namespace CargoSorter
         {
             try
             {
+                var inventories = new List<InventoryInfo>();
                 var workData = (CargoSorterWorkData)data;
                 if (workData.ConstructOnly)
                 {
@@ -706,7 +707,7 @@ namespace CargoSorter
                     workData.RootGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(grids);
                     foreach (var cubeGrid in grids)
                     {
-                        GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
+                        GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData, inventories);
                     }
                 }
                 else
@@ -717,11 +718,12 @@ namespace CargoSorter
 
                     foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                     {
-                        GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData);
+                        // MyLog.Default.WriteLineAndConsole($"Gathering inventories for {cubeGrid.CustomName}");
+                        GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData, inventories);
                     }
                 }
 
-                OrderInventories(workData);
+                GenerateInventoryBuckets(inventories, workData);
                 BuildExcessItemPool(workData);
                 BuildExcessItemMovement(workData);
                 BuildDesiredItemMovement(workData);
@@ -735,13 +737,13 @@ namespace CargoSorter
             }
         }
 
-        private void GatherInventory(IEnumerable<IMyTerminalBlock> blocks, CargoSorterWorkData workData)
+        private void GatherInventory(IEnumerable<IMyTerminalBlock> blocks, CargoSorterWorkData workData, List<InventoryInfo> outInventories)
         {
-            var inventories = new List<InventoryInfo>();
             foreach (var block in blocks)
             {
                 if (!Util.IsValid(block) || block.InventoryCount == 0 || !block.HasLocalPlayerAccess() || IsIgnored(block))
                 {
+                    // MyLog.Default.WriteLineAndConsole($"Ignoring block: {block.DisplayNameText}");
                     continue;
                 }
 
@@ -751,10 +753,12 @@ namespace CargoSorter
                     var inventoryInfo = new InventoryInfo(inventory, workData.SectionName);
                     if (inventoryInfo.TypeRequests == TypeRequests.Nothing && (inventoryInfo.VirtualInventory.Count == 0 || !inventoryInfo.SupportsConveyors))
                     {
+                        // MyLog.Default.WriteLineAndConsole($"Block wants nothing and has nothing, skipping: {block.DisplayNameText}");
                         continue;
                     }
 
-                    inventories.Add(inventoryInfo);
+                    // MyLog.Default.WriteLineAndConsole($"Adding inventory info for {block.DisplayNameText}");
+                    outInventories.Add(inventoryInfo);
                     if (inventoryInfo.VirtualInventory?.Count > 0)
                     {
                         foreach (var definitionId in inventoryInfo.VirtualInventory.Keys)
@@ -841,13 +845,19 @@ namespace CargoSorter
                     }
                 }
             }
+        }
 
+        private void GenerateInventoryBuckets(List<InventoryInfo> inventories, CargoSorterWorkData workData)
+        {
+            // MyLog.Default.WriteLineAndConsole($"Building inventory buckets");
             foreach (var inventory in inventories)
             {
+                // MyLog.Default.WriteLineAndConsole($"Building buckets for inventory on {inventory.Block.DisplayNameText}");
                 foreach (var definitionId in workData.TypeBuckets.Keys)
                 {
                     if (inventory.Constraint != null && !inventory.Constraint.Check(definitionId))
                     {
+                        // MyLog.Default.WriteLineAndConsole($"Failed constraint check for {definitionId} on {inventory.Block.DisplayNameText}, skipping");
                         continue;
                     }
 
@@ -874,13 +884,11 @@ namespace CargoSorter
                         buckets.Add(bucket);
                     }
 
+                    //MyLog.Default.WriteLineAndConsole($"Added inventory on {inventory.Block.DisplayNameText} to {definitionId} bucket {bucket}");
                     bucket.Inventories.Add(inventory);
                 }
             }
-        }
-
-        private static void OrderInventories(CargoSorterWorkData workData)
-        {
+            
             // MyLog.Default.WriteLineAndConsole($"CargoSort: Ordering accepted index");
             var crc = new Crc32();
             foreach (var typeBuckets in workData.TypeBuckets)
@@ -902,11 +910,10 @@ namespace CargoSorter
                         return comparison;
                     }
 
-                    // Spreads go last
+                    // Shuffles go last
                     return x.Flags.HasFlag(InventoryBucketFlags.Shuffle).CompareTo(y.Flags.HasFlag(InventoryBucketFlags.Shuffle));
                 });
 
-                // MyLog.Default.WriteLineAndConsole($"CargoSort: {typeBuckets.Key}");
                 foreach (var bucket in typeBuckets.Value)
                 {
                     bucket.Inventories.SortNoAlloc((x, y) =>
@@ -933,14 +940,22 @@ namespace CargoSorter
                         comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
                         return comparison == 0 ? x.Block.EntityId.CompareTo(y.Block.EntityId) : comparison;
                     });
-
-                    // MyLog.Default.WriteLineAndConsole($"CargoSort:   {bucket}");
-                    // foreach (var i in bucket.Inventories)
-                    // {
-                    //     MyLog.Default.WriteLineAndConsole($"CargoSort:     {i.Block.DisplayNameText}");
-                    // }
                 }
             }
+
+            // Debug dump
+            // foreach (var typeBuckets in workData.TypeBuckets)
+            // {
+            //     MyLog.Default.WriteLineAndConsole($"CargoSort: {typeBuckets.Key}");
+            //     foreach (var bucket in typeBuckets.Value)
+            //     {
+            //         MyLog.Default.WriteLineAndConsole($"CargoSort:   {bucket}");
+            //         foreach (var i in bucket.Inventories)
+            //         {
+            //             MyLog.Default.WriteLineAndConsole($"CargoSort:     {i.Block.DisplayNameText}");
+            //         }
+            //     }
+            // }
         }
 
         private bool IsIgnored(IMyTerminalBlock block)
