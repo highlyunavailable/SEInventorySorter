@@ -251,6 +251,7 @@ namespace CargoSorter
                     {
                         continue;
                     }
+
                     remainingAmounts[request.DefinitionId] -= amount;
                     items.Add(request.DefinitionId, amount);
                 }
@@ -291,6 +292,11 @@ namespace CargoSorter
         public static bool InsensitiveContains(this string inString, string value)
         {
             return inString.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        public static MyFixedPoint Abs(this MyFixedPoint value)
+        {
+            return value < MyFixedPoint.Zero ? -value : value;
         }
     }
 }

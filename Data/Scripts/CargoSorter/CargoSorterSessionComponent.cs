@@ -749,7 +749,7 @@ namespace CargoSorter
                 {
                     var inventory = block.GetInventory(i) as MyInventory;
                     var inventoryInfo = new InventoryInfo(inventory, workData.SectionName);
-                    if (inventoryInfo.TypeRequests == TypeRequests.Nothing && inventoryInfo.VirtualInventory.Count == 0)
+                    if (inventoryInfo.TypeRequests == TypeRequests.Nothing && (inventoryInfo.VirtualInventory.Count == 0 || !inventoryInfo.SupportsConveyors))
                     {
                         continue;
                     }
@@ -1942,7 +1942,7 @@ namespace CargoSorter
                 // Nothing to do with this item, we have exactly enough
                 if (item.Value == 0)
                 {
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} 0 items");
+                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Trimming {item.Key} 0 items");
                     workData.ItemAvailableAssemblers.Add(item.Key, null);
                     continue;
                 }
@@ -1953,17 +1953,20 @@ namespace CargoSorter
                 {
                     foreach (var quotaItem in workData.QuotaInfo.QuotaItems)
                     {
-                        if (quotaItem.ItemId == item.Key)
+                        if (quotaItem.ItemId != item.Key)
                         {
-                            if (quotaItem.Flag == RequestFlags.Minimum)
-                            {
-                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is minimum and item is over required");
-                                workData.ItemAvailableAssemblers.Add(item.Key, null);
-                                itemSatisfied = true;
-                            }
-
-                            break;
+                            continue;
                         }
+
+                        // MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: data {quotaItem.ItemId} {quotaItem.Amount} - {item.Value.Abs()} <= {quotaItem.Deviation}");
+                        if (item.Value.Abs() <= quotaItem.Deviation)
+                        {
+                            // MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping disassembly for {quotaItem.ItemId} - {item.Value.Abs()} <= {quotaItem.Deviation}");
+                            workData.ItemAvailableAssemblers.Add(item.Key, null);
+                            itemSatisfied = true;
+                        }
+
+                        break;
                     }
 
                     if (itemSatisfied)
@@ -2000,26 +2003,6 @@ namespace CargoSorter
                 }
                 else if (item.Value > 0 && !workData.ActiveDisassembling.Contains(item.Key))
                 {
-                    foreach (var quotaItem in workData.QuotaInfo.QuotaItems)
-                    {
-                        if (quotaItem.ItemId == item.Key)
-                        {
-                            if (quotaItem.Flag == RequestFlags.Limit)
-                            {
-                                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - flag is limit and item is under limit");
-                                workData.ItemAvailableAssemblers.Add(item.Key, null);
-                                itemSatisfied = true;
-                            }
-
-                            break;
-                        }
-                    }
-
-                    if (itemSatisfied)
-                    {
-                        continue;
-                    }
-
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Looking for assemblers for {item.Key}");
                     foreach (var assembler in workData.GroupAssemblers)
                     {
@@ -2058,18 +2041,23 @@ namespace CargoSorter
                 {
                     var missingCount = workData.MissingItems.GetValueOrDefault(item.Key);
                     var removeMissing = missingCount == 0;
-                    if (!removeMissing) // Check to see if a flag satisfies it instead
+                    if (!removeMissing)
                     {
                         foreach (var quotaItem in workData.QuotaInfo.QuotaItems)
                         {
-                            if (quotaItem.ItemId == item.Key)
+                            if (quotaItem.ItemId != item.Key)
                             {
-                                if ((quotaItem.Flag == RequestFlags.Minimum && missingCount < 0) || (quotaItem.Flag == RequestFlags.Limit && missingCount > 0))
-                                {
-                                    removeMissing = true;
-                                    break;
-                                }
+                                continue;
                             }
+
+                            if (missingCount.Abs() > quotaItem.Deviation)
+                            {
+                                // MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {quotaItem.ItemId} is out of range, keeping {missingCount.Abs()} > {quotaItem.Deviation}");
+                                continue;
+                            }
+
+                            removeMissing = true;
+                            break;
                         }
                     }
 
@@ -2153,20 +2141,24 @@ namespace CargoSorter
                     gatherInventoryContents = block.DisplayNameText.InsensitiveContains(Instance.Config.QuotaContainerKeyword);
                 }
 
-                if (gatherInventoryContents)
+                if (!gatherInventoryContents)
                 {
-                    for (int i = 0; i < block.InventoryCount; i++)
+                    continue;
+                }
+
+                for (int i = 0; i < block.InventoryCount; i++)
+                {
+                    var inventory = block.GetInventory(i) as MyInventory;
+                    foreach (var item in inventory.GetItems())
                     {
-                        var inventory = block.GetInventory(i) as MyInventory;
-                        foreach (var item in inventory.GetItems())
+                        MyFixedPoint amount;
+                        if (!workData.MissingItems.TryGetValue(item.Content.GetId(), out amount))
                         {
-                            MyFixedPoint amount;
-                            if (workData.MissingItems.TryGetValue(item.Content.GetId(), out amount))
-                            {
-                                amount -= item.Amount;
-                                workData.MissingItems[item.Content.GetId()] = amount;
-                            }
+                            continue;
                         }
+
+                        amount -= item.Amount;
+                        workData.MissingItems[item.Content.GetId()] = amount;
                     }
                 }
             }
@@ -2200,7 +2192,7 @@ namespace CargoSorter
                 var quotaItem = workData.QuotaInfo.QuotaItems[qi];
                 var missingItemCount = workData.MissingItems.GetValueOrDefault(quotaItem.ItemId);
                 var disassembling = missingItemCount < MyFixedPoint.Zero;
-                var remainingToQueue = MyFixedPoint.Floor(disassembling ? -missingItemCount : missingItemCount);
+                var remainingToQueue = MyFixedPoint.Floor(disassembling ? (-missingItemCount) - quotaItem.Deviation : missingItemCount);
 
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Starting Remaining To Queue: {remainingToQueue}");
 
@@ -2222,6 +2214,11 @@ namespace CargoSorter
                 {
                     //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Skipping {quotaItem.ItemId} - no blueprint");
                     continue;
+                }
+
+                if (disassembling)
+                {
+                    workData.MissingItems[quotaItem.ItemId] += quotaItem.Deviation;
                 }
 
                 availableAssemblers.Clear();

@@ -136,25 +136,53 @@ namespace CargoSorter
                     continue;
                 }
 
-                int itemCount;
-                if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                var rangeIndex = valueString.IndexOf('-');
+                if (rangeIndex != -1)
                 {
-                    RequestStatus |= RequestValidationStatus.InvalidCount;
-                    continue;
-                }
+                    var values = valueString.Split('-');
+                    if (values.Length != 2)
+                    {
+                        RequestStatus |= RequestValidationStatus.InvalidCount;
+                        continue;
+                    }
 
-                var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, RequestFlags.None);
-                var lastChar = valueString[valueString.Length - 1];
-                if (lastChar == 'L' || lastChar == 'l')
-                {
-                    quotaItem.Flag = RequestFlags.Limit;
-                }
-                else if (lastChar == 'M' || lastChar == 'm')
-                {
-                    quotaItem.Flag = RequestFlags.Minimum;
-                }
+                    int min;
+                    int max;
+                    if (!int.TryParse(values[0], out min) || min < 0 || !int.TryParse(values[1], out max) || max < min)
+                    {
+                        RequestStatus |= RequestValidationStatus.InvalidCount;
+                        continue;
+                    }
 
-                QuotaItems.Add(quotaItem);
+                    var quotaItem = new AssemblerQuotaItem(definitionId, min, max);
+                    QuotaItems.Add(quotaItem);
+                }
+                else
+                {
+                    int itemCount;
+                    if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                    {
+                        RequestStatus |= RequestValidationStatus.InvalidCount;
+                        continue;
+                    }
+
+                    var lastChar = valueString[valueString.Length - 1];
+                    if (lastChar == 'L' || lastChar == 'l')
+                    {
+                        var quotaItem = new AssemblerQuotaItem(definitionId, 0, itemCount);
+                        QuotaItems.Add(quotaItem);
+                    }
+                    else if (lastChar == 'M' || lastChar == 'm')
+                    {
+                        var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, MyFixedPoint.MaxIntValue);
+                        QuotaItems.Add(quotaItem);
+                    }
+                    else
+                    {
+                        var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, itemCount);
+                        QuotaItems.Add(quotaItem);
+                    }
+                }
             }
 
             iniParser.Clear();
@@ -171,13 +199,13 @@ namespace CargoSorter
     {
         public readonly MyDefinitionId ItemId;
         public readonly MyFixedPoint Amount;
-        public RequestFlags Flag;
+        public readonly MyFixedPoint Deviation;
 
-        public AssemblerQuotaItem(MyDefinitionId itemId, MyFixedPoint amount, RequestFlags flag) : this()
+        public AssemblerQuotaItem(MyDefinitionId itemId, MyFixedPoint min, MyFixedPoint max) : this()
         {
             ItemId = itemId;
-            Amount = amount;
-            Flag = flag;
+            Amount = min;
+            Deviation = max - min;
         }
     }
 }
