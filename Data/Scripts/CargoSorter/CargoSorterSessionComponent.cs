@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using CoreSystems.Api;
 using ParallelTasks;
 using Sandbox.Common.ObjectBuilders;
@@ -43,6 +44,8 @@ namespace CargoSorter
         {
             { new MyDefinitionId(typeof(MyObjectBuilder_InteriorTurret), "LargeInteriorTurret"), false }
         };
+
+        private static readonly Regex QuotedParsePattern = new Regex(@"[^\s""']+|""([^""]*)""|'([^']*)'", RegexOptions.Compiled | RegexOptions.Multiline);
 
         private readonly WcApi wcApi = new WcApi();
         private readonly HashSet<MyDefinitionId> weapons = new HashSet<MyDefinitionId>();
@@ -450,6 +453,44 @@ namespace CargoSorter
                     MyAPIGateway.Utilities.ShowMessage("Sorter", "No sortable items found to copy to clipboard");
                 }
             }
+            else if (messageText.StartsWith("/copycd", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+                var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
+                if (shipController == null)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to copy custom data, as the pattern references the current grid");
+                    return;
+                }
+
+                var matches = QuotedParsePattern.Matches(messageText);
+                if (matches.Count != 3)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "Incorrect copy custom data arguments: The command must be in the form of '/copycd \"Source Pattern\" \"Target Pattern\"'");
+                    return;
+                }
+
+                Util.CopyCustomData(shipController.CubeGrid, matches[1].Value, matches[2].Value);
+            }
+            else if (messageText.StartsWith("/splitcd", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+                var shipController = MyAPIGateway.Session.LocalHumanPlayer.Controller.ControlledEntity as IMyShipController;
+                if (shipController == null)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "You must be seated on a grid to split custom data, as the pattern references the current grid");
+                    return;
+                }
+
+                var matches = QuotedParsePattern.Matches(messageText);
+                if (matches.Count < 3 || matches.Count > 4)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "Incorrect split custom data arguments: The command must be in the form of '/copycd \"Source Pattern\" \"Target Pattern\" \"Profile\"' (profile is optional).");
+                    return;
+                }
+
+                Util.SplitCustomData(shipController.CubeGrid, matches[1].Value, matches[2].Value, matches.Count == 4 ? matches[3].Value : null);
+            }
         }
 
         private static string ExtractProfileFromMessage(string messageText)
@@ -558,14 +599,7 @@ namespace CargoSorter
                 }
             }
 
-            if (queuePrerequisites.Count > 0)
-            {
-                return InventoryInfo.BuildCustomData(queuePrerequisites, true);
-            }
-            else
-            {
-                return string.Empty;
-            }
+            return queuePrerequisites.Count > 0 ? InventoryInfo.BuildCustomData(queuePrerequisites, true) : string.Empty;
         }
 
         public string GenerateResultCustomDataFromQueue(IMyAssembler assembler)
@@ -585,14 +619,7 @@ namespace CargoSorter
                 }
             }
 
-            if (queueResults.Count > 0)
-            {
-                return InventoryInfo.BuildCustomData(queueResults, true);
-            }
-            else
-            {
-                return string.Empty;
-            }
+            return queueResults.Count > 0 ? InventoryInfo.BuildCustomData(queueResults, true) : string.Empty;
         }
 
         public bool GenerateQueueFromCustomData(IMyAssembler assembler)
@@ -665,14 +692,7 @@ namespace CargoSorter
                 }
             }
 
-            if (components.Count > 0)
-            {
-                return InventoryInfo.BuildCustomData(components, true);
-            }
-            else
-            {
-                return string.Empty;
-            }
+            return components.Count > 0 ? InventoryInfo.BuildCustomData(components, true) : string.Empty;
         }
 
         private void SortInventoryAction(WorkData data)
@@ -839,8 +859,8 @@ namespace CargoSorter
                     }
 
                     if (inventory.TypeRequests.HasFlag(TypeRequests.Ores) && allOres.Contains(definitionId) ||
-                        inventory.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId) || 
-                        inventory.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId) || 
+                        inventory.TypeRequests.HasFlag(TypeRequests.Ingots) && allIngots.Contains(definitionId) ||
+                        inventory.TypeRequests.HasFlag(TypeRequests.Components) && allComponents.Contains(definitionId) ||
                         inventory.TypeRequests.HasFlag(TypeRequests.Ammo) && allAmmo.Contains(definitionId))
                     {
                         bucketFlags |= InventoryBucketFlags.Shuffle;

@@ -87,7 +87,7 @@ namespace CargoSorter
             if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
-                ConfigParseResult = ParseCustomDataRequests("Inventory");
+                ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != "Inventory");
             }
             else
             {
@@ -141,7 +141,7 @@ namespace CargoSorter
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
-                    ConfigParseResult = ParseCustomDataRequests("Inventory");
+                    ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != "Inventory");
                 }
             }
 
@@ -398,7 +398,7 @@ namespace CargoSorter
             return sumVolume <= maxVolume && sumMass <= maxMass;
         }
 
-        private MyIniParseResult ParseCustomDataRequests(string sectionName)
+        private MyIniParseResult ParseCustomDataRequests(string sectionName, bool skipCreate = false)
         {
             MyIniParseResult quotaParseResult = new MyIniParseResult();
             if (!Util.IsValid(Block))
@@ -408,7 +408,7 @@ namespace CargoSorter
             }
 
             iniParser.Clear();
-            if (IsCustomDataEmpty(Block.CustomData))
+            if (!skipCreate && IsCustomDataEmpty(Block.CustomData))
             {
                 Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, iniParser);
             }
@@ -419,7 +419,7 @@ namespace CargoSorter
                 return quotaParseResult;
             }
 
-            if (!iniParser.ContainsSection(sectionName))
+            if (!skipCreate && !iniParser.ContainsSection(sectionName))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} has no {sectionName} config section");
                 Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, iniParser);
@@ -511,6 +511,7 @@ namespace CargoSorter
                             RequestStatus |= RequestValidationStatus.InvalidCount;
                             continue;
                         }
+
                         requestValue.Flag = RequestFlags.Percent;
                     }
 
@@ -568,12 +569,7 @@ namespace CargoSorter
                 }
             }
 
-            if (items.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            return BuildCustomData(items, false, sectionName, ini);
+            return items.Count == 0 ? string.Empty : BuildCustomData(items, false, sectionName, ini);
         }
 
         internal bool CanItemsFit(MyFixedPoint amount, MyDefinitionId itemDefinition, out MyFixedPoint volumeToBeMoved, out MyFixedPoint massToBeMoved)
@@ -655,6 +651,11 @@ namespace CargoSorter
             if (string.IsNullOrEmpty(sectionName))
             {
                 sectionName = "Inventory";
+            }
+
+            if (ini.ContainsSection(sectionName))
+            {
+                ini.DeleteSection(sectionName);
             }
 
             ini.AddSection(sectionName);
