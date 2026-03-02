@@ -888,7 +888,7 @@ namespace CargoSorter
                     bucket.Inventories.Add(inventory);
                 }
             }
-            
+
             // MyLog.Default.WriteLineAndConsole($"CargoSort: Ordering accepted index");
             var crc = new Crc32();
             foreach (var typeBuckets in workData.TypeBuckets)
@@ -2512,10 +2512,30 @@ namespace CargoSorter
 
                                         var value = ini.Get(iniKey);
                                         var valueString = value.ToString();
-                                        int itemCount;
-                                        if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                        var rangeIndex = valueString.IndexOf('-');
+                                        if (rangeIndex != -1)
                                         {
-                                            warningsBuilder.AppendFormat("Invalid requested value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
+                                            var values = valueString.Split('-');
+                                            if (values.Length != 2)
+                                            {
+                                                warningsBuilder.AppendFormat("Invalid range format: '{0}' for type '{1}'. Ranges must be in the format 'minimum-maximum' with numeric minimum and maximum values.", valueString, iniKey.Name).AppendLine();
+                                                continue;
+                                            }
+
+                                            int min;
+                                            int max;
+                                            if (!int.TryParse(values[0], out min) || min < 0 || !int.TryParse(values[1], out max) || max < min)
+                                            {
+                                                warningsBuilder.AppendFormat("Invalid range: '{0}' for type '{1}'. Check that minimum is less than maximum and that both are fully numeric.", valueString, iniKey.Name).AppendLine();
+                                            }
+                                        }
+                                        else
+                                        {
+                                            int itemCount;
+                                            if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
+                                            {
+                                                warningsBuilder.AppendFormat("Invalid quota value: '{0}' for type '{1}'", valueString, iniKey.Name).AppendLine();
+                                            }
                                         }
                                     }
                                 }
