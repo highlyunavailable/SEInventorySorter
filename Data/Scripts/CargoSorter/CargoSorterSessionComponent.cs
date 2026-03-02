@@ -2515,7 +2515,7 @@ namespace CargoSorter
                                         var rangeIndex = valueString.IndexOf('-');
                                         if (rangeIndex != -1)
                                         {
-                                            var values = valueString.Split('-');
+                                            var values = valueString.Split(new[] { '-' }, StringSplitOptions.RemoveEmptyEntries);
                                             if (values.Length != 2)
                                             {
                                                 warningsBuilder.AppendFormat("Invalid range format: '{0}' for type '{1}'. Ranges must be in the format 'minimum-maximum' with numeric minimum and maximum values.", valueString, iniKey.Name).AppendLine();

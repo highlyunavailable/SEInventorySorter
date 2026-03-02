@@ -139,7 +139,7 @@ namespace CargoSorter
                 var rangeIndex = valueString.IndexOf('-');
                 if (rangeIndex != -1)
                 {
-                    var values = valueString.Split('-');
+                    var values = valueString.Split(new[] { '-' }, StringSplitOptions.RemoveEmptyEntries);
                     if (values.Length != 2)
                     {
                         RequestStatus |= RequestValidationStatus.InvalidCount;
