@@ -1,29 +1,28 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.ModAPI;
 using VRage.Utils;
 
-namespace CargoSorter
+namespace InventorySorter
 {
     public class CargoSorterConfiguration
     {
         private const string ConfigFileName = "CargoSort.xml";
 
-        public const string defaultSpecialContainerKeyword = "Special";
-        public const string defaultLimitedContainerKeyword = "Limited";
-        public const string defaultOreContainerKeyword = "Ores";
-        public const string defaultIngotContainerKeyword = "Ingots";
-        public const string defaultComponentContainerKeyword = "Components";
-        public const string defaultToolContainerKeyword = "Tools";
-        public const string defaultAmmoContainerKeyword = "Ammo";
-        public const string defaultBottleContainerKeyword = "Bottles";
-        public const string defaultConsumablesContainerKeyword = "Consumables";
-        public const string defaultIngredientsContainerKeyword = "Ingredients";
-        public const string defaultAnyContainerKeyword = "Any Item";
-        public const string defaultQuotaContainerKeyword = "Cargo";
-        public static readonly string[] defaultLockedContainerKeywords = { "Locked", "Hidden", "!manual" };
+        private const string DefaultSpecialContainerKeyword = "Special";
+        private const string DefaultLimitedContainerKeyword = "Limited";
+        private const string DefaultOreContainerKeyword = "Ores";
+        private const string DefaultIngotContainerKeyword = "Ingots";
+        private const string DefaultComponentContainerKeyword = "Components";
+        private const string DefaultToolContainerKeyword = "Tools";
+        private const string DefaultAmmoContainerKeyword = "Ammo";
+        private const string DefaultBottleContainerKeyword = "Bottles";
+        private const string DefaultConsumablesContainerKeyword = "Consumables";
+        private const string DefaultIngredientsContainerKeyword = "Ingredients";
+        private const string DefaultAnyContainerKeyword = "Any Item";
+        private const string DefaultQuotaContainerKeyword = "Cargo";
+        private static readonly string[] DefaultLockedContainerKeywords = { "Locked", "Hidden", "!manual" };
 
         public string SpecialContainerKeyword { get; set; }
         public string LimitedContainerKeyword { get; set; }
@@ -138,36 +137,36 @@ namespace CargoSorter
 
         private void Upgrade()
         {
-            SpecialContainerKeyword = CurrentOrDefault(SpecialContainerKeyword, defaultSpecialContainerKeyword);
-            LimitedContainerKeyword = CurrentOrDefault(LimitedContainerKeyword, defaultLimitedContainerKeyword);
-            OreContainerKeyword = CurrentOrDefault(OreContainerKeyword, defaultOreContainerKeyword);
-            IngotContainerKeyword = CurrentOrDefault(IngotContainerKeyword, defaultIngotContainerKeyword);
-            AmmoContainerKeyword = CurrentOrDefault(defaultAmmoContainerKeyword, AmmoContainerKeyword);
-            ComponentContainerKeyword = CurrentOrDefault(ComponentContainerKeyword, defaultComponentContainerKeyword);
-            ToolContainerKeyword = CurrentOrDefault(ToolContainerKeyword, defaultToolContainerKeyword);
-            BottleContainerKeyword = CurrentOrDefault(BottleContainerKeyword, defaultBottleContainerKeyword);
-            ConsumablesContainerKeyword = CurrentOrDefault(ConsumablesContainerKeyword, defaultConsumablesContainerKeyword);
-            IngredientsContainerKeyword = CurrentOrDefault(IngredientsContainerKeyword, defaultIngredientsContainerKeyword);
-            AnyContainerKeyword = CurrentOrDefault(AnyContainerKeyword, defaultAnyContainerKeyword);
-            QuotaContainerKeyword = CurrentOrDefault(QuotaContainerKeyword, defaultQuotaContainerKeyword);
+            SpecialContainerKeyword = CurrentOrDefault(SpecialContainerKeyword, DefaultSpecialContainerKeyword);
+            LimitedContainerKeyword = CurrentOrDefault(LimitedContainerKeyword, DefaultLimitedContainerKeyword);
+            OreContainerKeyword = CurrentOrDefault(OreContainerKeyword, DefaultOreContainerKeyword);
+            IngotContainerKeyword = CurrentOrDefault(IngotContainerKeyword, DefaultIngotContainerKeyword);
+            AmmoContainerKeyword = CurrentOrDefault(DefaultAmmoContainerKeyword, AmmoContainerKeyword);
+            ComponentContainerKeyword = CurrentOrDefault(ComponentContainerKeyword, DefaultComponentContainerKeyword);
+            ToolContainerKeyword = CurrentOrDefault(ToolContainerKeyword, DefaultToolContainerKeyword);
+            BottleContainerKeyword = CurrentOrDefault(BottleContainerKeyword, DefaultBottleContainerKeyword);
+            ConsumablesContainerKeyword = CurrentOrDefault(ConsumablesContainerKeyword, DefaultConsumablesContainerKeyword);
+            IngredientsContainerKeyword = CurrentOrDefault(IngredientsContainerKeyword, DefaultIngredientsContainerKeyword);
+            AnyContainerKeyword = CurrentOrDefault(AnyContainerKeyword, DefaultAnyContainerKeyword);
+            QuotaContainerKeyword = CurrentOrDefault(QuotaContainerKeyword, DefaultQuotaContainerKeyword);
             AutoSortFrequencySeconds = AutoSortFrequencySeconds > 0 ? AutoSortFrequencySeconds : 10;
         }
 
         private void SetDefaults()
         {
-            SpecialContainerKeyword = defaultSpecialContainerKeyword;
-            LimitedContainerKeyword = defaultLimitedContainerKeyword;
-            OreContainerKeyword = defaultOreContainerKeyword;
-            IngotContainerKeyword = defaultIngotContainerKeyword;
-            AmmoContainerKeyword = defaultAmmoContainerKeyword;
-            ComponentContainerKeyword = defaultComponentContainerKeyword;
-            ToolContainerKeyword = defaultToolContainerKeyword;
-            BottleContainerKeyword = defaultBottleContainerKeyword;
-            ConsumablesContainerKeyword = defaultConsumablesContainerKeyword;
-            IngredientsContainerKeyword = defaultIngredientsContainerKeyword;
-            AnyContainerKeyword = defaultAnyContainerKeyword;
-            QuotaContainerKeyword = defaultQuotaContainerKeyword;
-            LockedContainerKeywords = new List<string>(defaultLockedContainerKeywords);
+            SpecialContainerKeyword = DefaultSpecialContainerKeyword;
+            LimitedContainerKeyword = DefaultLimitedContainerKeyword;
+            OreContainerKeyword = DefaultOreContainerKeyword;
+            IngotContainerKeyword = DefaultIngotContainerKeyword;
+            AmmoContainerKeyword = DefaultAmmoContainerKeyword;
+            ComponentContainerKeyword = DefaultComponentContainerKeyword;
+            ToolContainerKeyword = DefaultToolContainerKeyword;
+            BottleContainerKeyword = DefaultBottleContainerKeyword;
+            ConsumablesContainerKeyword = DefaultConsumablesContainerKeyword;
+            IngredientsContainerKeyword = DefaultIngredientsContainerKeyword;
+            AnyContainerKeyword = DefaultAnyContainerKeyword;
+            QuotaContainerKeyword = DefaultQuotaContainerKeyword;
+            LockedContainerKeywords = new List<string>(DefaultLockedContainerKeywords);
             GasGeneratorFillPercent = 0.8f;
             ExpectedLargeGridReactorFuel = 100;
             ExpectedSmallGridReactorFuel = 25;

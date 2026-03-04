@@ -1,21 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using Sandbox.Definitions;
-using Sandbox.Game;
-using Sandbox.Game.Entities;
-using Sandbox.Game.Entities.Cube;
 using Sandbox.ModAPI;
-using SpaceEngineers.Game.ModAPI;
 using VRage;
 using VRage.Game;
-using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Input;
-using VRage.Utils;
 
-namespace CargoSorter
+namespace InventorySorter.VirtualInventory
 {
     public class ProductionQuotaInfo
     {

@@ -1,7 +1,6 @@
-﻿using System;
-using VRage;
+﻿using VRage;
 
-namespace CargoSorter
+namespace InventorySorter.VirtualInventory
 {
     public struct ExcessInfo
     {

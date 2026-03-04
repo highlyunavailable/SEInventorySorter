@@ -1,8 +1,7 @@
 ﻿using VRage;
 using VRage.Game;
-using VRage.Game.ModAPI;
 
-namespace CargoSorter
+namespace InventorySorter.VirtualInventory
 {
     public struct InventoryMovement
     {

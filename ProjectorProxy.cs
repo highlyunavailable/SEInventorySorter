@@ -1,9 +1,9 @@
-﻿using MultigridProjector.Api;
+﻿using System.Collections.Generic;
+using MultigridProjector.Api;
 using Sandbox.ModAPI;
-using System.Collections.Generic;
 using VRage.Game.ModAPI;
 
-namespace CargoSorter
+namespace InventorySorter
 {
     internal class ProjectorProxy
     {

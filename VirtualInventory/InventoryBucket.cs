@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace CargoSorter
+namespace InventorySorter.VirtualInventory
 {
     [Flags]
     internal enum InventoryBucketFlags : byte

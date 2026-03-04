@@ -1,10 +1,10 @@
-﻿using Sandbox.ModAPI;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using InventorySorter.VirtualInventory;
 using Sandbox.Game;
-using Sandbox.Game.Entities;
+using Sandbox.ModAPI;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -12,9 +12,9 @@ using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.ModAPI;
 using IMyBlockGroup = Sandbox.ModAPI.Ingame.IMyBlockGroup;
 
-namespace CargoSorter
+namespace InventorySorter
 {
-    public class Util
+    public static class Util
     {
         public static bool IsDedicatedServer =>
             MyAPIGateway.Multiplayer.MultiplayerActive && MyAPIGateway.Utilities.IsDedicated;
@@ -42,7 +42,7 @@ namespace CargoSorter
             return sb;
         }
 
-        public static List<IMyTerminalBlock> CollectBlocksByPattern(IMyCubeGrid rootGrid, string pattern)
+        private static List<IMyTerminalBlock> CollectBlocksByPattern(IMyCubeGrid rootGrid, string pattern)
         {
             var blocks = new List<IMyTerminalBlock>();
             var collectGroupMembersFromGrid = false;

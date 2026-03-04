@@ -399,7 +399,5 @@ FodyWeavers.xsd
 .idea
 
 # Space Engineers
-*.sln
-*.csproj
 metadata.mod
 modinfo.sbmi-*

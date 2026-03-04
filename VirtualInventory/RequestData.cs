@@ -1,7 +1,7 @@
 ﻿using VRage;
 using VRage.Game;
 
-namespace CargoSorter
+namespace InventorySorter.VirtualInventory
 {
     public enum RequestFlags : byte
     {

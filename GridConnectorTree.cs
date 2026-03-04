@@ -1,9 +1,9 @@
-﻿using Sandbox.ModAPI;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
 
-namespace CargoSorter
+namespace InventorySorter
 {
     public class GridConnectorTree
     {
@@ -35,16 +35,13 @@ namespace CargoSorter
                         continue;
                     }
 
-                    if (!Branches.ContainsKey(connector))
+                    if (Branches.ContainsKey(connector))
                     {
-                        GridConnectorTree connectedTree;
-                        connectedTree = FindInTreeRecursive(connector.OtherConnector.CubeGrid);
-                        if (connectedTree == null)
-                        {
-                            connectedTree = new GridConnectorTree(connector.OtherConnector.CubeGrid, this);
-                        }
-                        Branches[connector] = connectedTree;
+                        continue;
                     }
+
+                    var connectedTree = FindInTreeRecursive(connector.OtherConnector.CubeGrid) ?? new GridConnectorTree(connector.OtherConnector.CubeGrid, this);
+                    Branches[connector] = connectedTree;
                 }
             }
         }

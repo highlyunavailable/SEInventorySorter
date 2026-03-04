@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using InventorySorter.VirtualInventory;
 using ParallelTasks;
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
@@ -7,7 +8,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 
-namespace CargoSorter
+namespace InventorySorter
 {
     public enum ResultsDisplayType : byte
     {

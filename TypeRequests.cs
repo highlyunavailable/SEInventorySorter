@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace CargoSorter
+namespace InventorySorter
 {
     [Flags]
     public enum TypeRequests : uint
