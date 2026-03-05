@@ -1,0 +1,73 @@
+﻿using System.Collections.Generic;
+using Sandbox.ModAPI;
+using Sandbox.ModAPI.Interfaces.Terminal;
+using VRage.Game.ModAPI;
+using VRage.Utils;
+
+namespace InventorySorter.TerminalControls
+{
+    public static class ProjectorTerminalControls
+    {
+        public static List<IMyTerminalControl> Controls;
+        public static List<IMyTerminalAction> Actions;
+        private static bool Done => Controls != null && Actions != null;
+        private static bool _controlsAdded;
+        internal static void EnsureControlAdded()
+        {
+            if (_controlsAdded)
+            {
+                return;
+            }
+
+            EnsureControlSetup();
+
+            _controlsAdded = true;
+
+            foreach (var control in Controls)
+            {
+                MyAPIGateway.TerminalControls.AddControl<IMyProjector>(control);
+            }
+
+            foreach (var action in Actions)
+            {
+                MyAPIGateway.TerminalControls.AddAction<IMyProjector>(action);
+            }
+        }
+        
+        internal static void EnsureControlSetup()
+        {
+            if (Done)
+            {
+                return;
+            }
+
+            Actions = new List<IMyTerminalAction>();
+            Controls = new List<IMyTerminalControl>();
+            {
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("CargoSort_GenerateCustomDataFromProjectionButton");
+                control.Title = MyStringId.GetOrCompute("Make Data from Projection");
+                control.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data from the projected grid. Paste this into an assembler to queue it!");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasProjectedGrid;
+                control.Action = GenerateCustomDataFromProjectionAction;
+                Controls.Add(control);
+            }
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: Added projector controls: Done: {Done}");
+        }
+        public static bool HasProjectedGrid(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyProjector)?.ProjectedGrid != null;
+        private static void GenerateCustomDataFromProjectionAction(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && block is IMyProjector && CargoSorterSessionComponent.Instance != null)
+            {
+                var data = CargoSorterSessionComponent.Instance.GenerateCustomDataFromProjector(block as IMyProjector);
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", $"{block.DisplayNameText}", " Grid Components", data, (clickResult) =>
+                {
+                    if (!string.IsNullOrWhiteSpace(data) && clickResult == ResultEnum.OK)
+                    {
+                        MyClipboardHelper.SetClipboard(data);
+                    }
+                }, !string.IsNullOrWhiteSpace(data) ? "Copy to Clipboard" : null);
+            }
+        }
+    }
+}

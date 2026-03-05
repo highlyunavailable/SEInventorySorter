@@ -1,26 +1,27 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using CargoSorter;
 using CoreSystems.Api;
+using InventorySorter.TerminalControls;
 using InventorySorter.VirtualInventory;
 using ParallelTasks;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game;
-using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using Sandbox.ModAPI.Interfaces.Terminal;
 using VRage;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Game.ModAPI.Interfaces;
 using VRage.ObjectBuilders;
 using VRage.Utils;
-using IMyControllableEntity = VRage.Game.ModAPI.Interfaces.IMyControllableEntity;
 
 namespace InventorySorter
 {
@@ -62,9 +63,6 @@ namespace InventorySorter
         private IMyShipController _autoSortingController;
         private string _autoSortProfile;
         private int _autoSortTicksRemaining;
-
-        private bool _earlyInitComplete;
-        private readonly ConcurrentQueue<Type> _controlQueue = new ConcurrentQueue<Type>();
 
         public override void LoadData()
         {
@@ -258,94 +256,16 @@ namespace InventorySorter
             //{
             //    MyLog.Default.WriteLineAndConsole($"CargoSort: Normalized ID {item.Key} -> {item.Value}");
             //}
-            MyEntities.OnEntityCreate += OnEntityCreate;
-        }
-
-        private void OnEntityCreate(MyEntity entity)
-        {
-            if (entity is IMyShipController)
-            {
-                if (!TerminalControls.TerminalControls.CockpitControls && entity is IMyCockpit)
-                {
-                    MyAPIGateway.Utilities.InvokeOnGameThread(TerminalControls.TerminalControls.CreateShipControllerControls<IMyCockpit>);
-                    TerminalControls.TerminalControls.CockpitControls = true;
-                    if (!_earlyInitComplete)
-                    {
-                        _controlQueue.Enqueue(typeof(IMyCockpit));
-                    }
-                }
-                else if (!TerminalControls.TerminalControls.RemoteControlControls && entity is IMyRemoteControl)
-                {
-                    MyAPIGateway.Utilities.InvokeOnGameThread(TerminalControls.TerminalControls.CreateShipControllerControls<IMyRemoteControl>);
-                    TerminalControls.TerminalControls.RemoteControlControls = true;
-                    if (!_earlyInitComplete)
-                    {
-                        _controlQueue.Enqueue(typeof(IMyRemoteControl));
-                    }
-                }
-            }
-            else if (!TerminalControls.TerminalControls.CargoContainerControls && entity is IMyCargoContainer)
-            {
-                MyAPIGateway.Utilities.InvokeOnGameThread(TerminalControls.TerminalControls.CreateTerminalBlockControls<IMyCargoContainer>);
-                TerminalControls.TerminalControls.CargoContainerControls = true;
-                if (!_earlyInitComplete)
-                {
-                    _controlQueue.Enqueue(typeof(IMyCargoContainer));
-                }
-            }
-            else if (!TerminalControls.TerminalControls.AssemblerControls && entity is IMyAssembler)
-            {
-                MyAPIGateway.Utilities.InvokeOnGameThread(TerminalControls.TerminalControls.CreateTerminalBlockControls<IMyAssembler>);
-                TerminalControls.TerminalControls.AssemblerControls = true;
-                if (!_earlyInitComplete)
-                {
-                    _controlQueue.Enqueue(typeof(IMyAssembler));
-                }
-            }
-            else if (!TerminalControls.TerminalControls.ProjectorControls && entity is IMyProjector)
-            {
-                MyAPIGateway.Utilities.InvokeOnGameThread(TerminalControls.TerminalControls.CreateTerminalBlockControls<IMyProjector>);
-                TerminalControls.TerminalControls.ProjectorControls = true;
-                if (!_earlyInitComplete)
-                {
-                    _controlQueue.Enqueue(typeof(IMyProjector));
-                }
-            }
         }
 
         public override void BeforeStart()
         {
+            MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
+            MyAPIGateway.TerminalControls.CustomActionGetter += CustomActionGetter;
             if (!_wcApi.IsReady)
             {
                 _wcApi.Load(OnWcReady, true);
             }
-
-            Type controlType;
-            while (_controlQueue.TryDequeue(out controlType))
-            {
-                if (controlType == typeof(IMyCockpit))
-                {
-                    TerminalControls.TerminalControls.CreateShipControllerControls<IMyCockpit>();
-                }
-                else if (controlType == typeof(IMyRemoteControl))
-                {
-                    TerminalControls.TerminalControls.CreateShipControllerControls<IMyRemoteControl>();
-                }
-                else if (controlType == typeof(IMyCargoContainer))
-                {
-                    TerminalControls.TerminalControls.CreateTerminalBlockControls<IMyCargoContainer>();
-                }
-                else if (controlType == typeof(IMyAssembler))
-                {
-                    TerminalControls.TerminalControls.CreateAssemblerControls<IMyAssembler>();
-                }
-                else if (controlType == typeof(IMyProjector))
-                {
-                    TerminalControls.TerminalControls.CreateProjectorControls<IMyProjector>();
-                }
-            }
-
-            _earlyInitComplete = true;
         }
 
         private void OnWcReady()
@@ -1001,7 +921,7 @@ namespace InventorySorter
                 {
                     bucket.Inventories.SortNoAlloc((x, y) =>
                     {
-                        int comparison;
+                        var comparison = 0;
                         // Compare by entityID and type hash to shuffle when using broad types
                         if (bucket.Flags.HasFlag(InventoryBucketFlags.Shuffle))
                         {
@@ -1216,8 +1136,9 @@ namespace InventorySorter
                         }
 
                         // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv source: {typeBucket.Key} {sourceBucket} {sourceInventory.Block?.DisplayNameText}");
-                        foreach (var destBucket in typeBucket.Value)
+                        for (var index = 0; index < typeBucket.Value.Count; index++)
                         {
+                            var destBucket = typeBucket.Value[index];
                             foreach (var destInventory in destBucket.Inventories)
                             {
                                 if (sourceInventory == destInventory)
@@ -1999,8 +1920,10 @@ namespace InventorySorter
                 var workData = (QuotaManagerWorkData)data;
                 var tree = new GridConnectorTree(workData.Block.CubeGrid);
                 var nodes = tree.GatherRecursive(c =>
-                    c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
-                    c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false);
+                {
+                    return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
+                           c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
+                });
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                 {
@@ -2595,7 +2518,7 @@ namespace InventorySorter
                                         var rangeIndex = valueString.IndexOf('-');
                                         if (rangeIndex != -1)
                                         {
-                                            var values = valueString.Split(new[] { '-' }, StringSplitOptions.RemoveEmptyEntries);
+                                            var values = valueString.Split('-');
                                             if (values.Length != 2)
                                             {
                                                 warningsBuilder.AppendFormat("Invalid range format: '{0}' for type '{1}'. Ranges must be in the format 'minimum-maximum' with numeric minimum and maximum values.", valueString, iniKey.Name).AppendLine();
@@ -2749,6 +2672,50 @@ namespace InventorySorter
             }
         }
 
+        private void CustomActionGetter(IMyTerminalBlock block, List<IMyTerminalAction> actions)
+        {
+            if (block is IMyShipController)
+            {
+                ShipControllerTerminalControls.EnsureControlSetup();
+                actions.AddRange(ShipControllerTerminalControls.Actions);
+            }
+            else if (block is IMyAssembler)
+            {
+                AssemblerTerminalControls.EnsureControlSetup();
+                actions.AddRange(AssemblerTerminalControls.Actions);
+            }
+            else if (block is IMyProjector)
+            {
+                ProjectorTerminalControls.EnsureControlSetup();
+                actions.AddRange(ProjectorTerminalControls.Actions);
+            }
+        }
+
+        private void CustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
+        {
+            if (block is IMyShipController)
+            {
+                ShipControllerTerminalControls.EnsureControlSetup();
+                controls.AddRange(ShipControllerTerminalControls.Controls);
+            }
+            else if (block is IMyAssembler)
+            {
+                AssemblerTerminalControls.EnsureControlSetup();
+                controls.AddRange(AssemblerTerminalControls.Controls);
+            }
+            else if (block is IMyProjector)
+            {
+                ProjectorTerminalControls.EnsureControlSetup();
+                controls.AddRange(ProjectorTerminalControls.Controls);
+            }
+
+            if (CargoTerminalControls.CanFitInCharacterInventory(block))
+            {
+                CargoTerminalControls.EnsureControlSetup();
+                controls.AddRange(CargoTerminalControls.Controls);
+            }
+        }
+
         private string BuildAllSortableItemNamesString()
         {
             var sbMap = new StringBuilder();
@@ -2834,6 +2801,8 @@ namespace InventorySorter
                 _wcApi.Unload();
             }
 
+            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+            MyAPIGateway.TerminalControls.CustomActionGetter -= CustomActionGetter;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             Instance = null;
         }

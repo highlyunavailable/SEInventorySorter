@@ -42,7 +42,7 @@ namespace InventorySorter
             return sb;
         }
 
-        private static List<IMyTerminalBlock> CollectBlocksByPattern(IMyCubeGrid rootGrid, string pattern)
+        public static List<IMyTerminalBlock> CollectBlocksByPattern(IMyCubeGrid rootGrid, string pattern)
         {
             var blocks = new List<IMyTerminalBlock>();
             var collectGroupMembersFromGrid = false;

@@ -35,13 +35,16 @@ namespace InventorySorter
                         continue;
                     }
 
-                    if (Branches.ContainsKey(connector))
+                    if (!Branches.ContainsKey(connector))
                     {
-                        continue;
+                        GridConnectorTree connectedTree;
+                        connectedTree = FindInTreeRecursive(connector.OtherConnector.CubeGrid);
+                        if (connectedTree == null)
+                        {
+                            connectedTree = new GridConnectorTree(connector.OtherConnector.CubeGrid, this);
+                        }
+                        Branches[connector] = connectedTree;
                     }
-
-                    var connectedTree = FindInTreeRecursive(connector.OtherConnector.CubeGrid) ?? new GridConnectorTree(connector.OtherConnector.CubeGrid, this);
-                    Branches[connector] = connectedTree;
                 }
             }
         }
