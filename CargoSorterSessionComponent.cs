@@ -9,6 +9,7 @@ using InventorySorter.TerminalControls;
 using InventorySorter.VirtualInventory;
 using ParallelTasks;
 using Sandbox.Common.ObjectBuilders;
+using Sandbox.Common.ObjectBuilders.Definitions;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
@@ -974,6 +975,12 @@ namespace InventorySorter
             return false;
         }
 
+        private bool ShouldUseBottleFillerLogic(InventoryInfo inventory, MyDefinitionId definitionId)
+        {
+            return inventory.TypeRequests.HasFlag(TypeRequests.GasBottles) &&
+                   (definitionId.TypeId == typeof(MyObjectBuilder_OxygenContainerObject) || definitionId.TypeId == typeof(MyObjectBuilder_GasContainerObject));
+        }
+
         private void BuildExcessItemPool(CargoSorterWorkData workData)
         {
             foreach (var typeBucket in workData.TypeBuckets)
@@ -982,17 +989,28 @@ namespace InventorySorter
                 {
                     foreach (var inventory in bucket.Inventories)
                     {
-                        foreach (var item in inventory.VirtualInventory)
+                        var excess = inventory.VirtualInventory.GetValueOrDefault(typeBucket.Key);
+                        if (ShouldUseBottleFillerLogic(inventory, typeBucket.Key))
                         {
-                            var excess = -CalculateAmountWanted(inventory, item.Key, item.Value, workData);
-                            if (excess <= MyFixedPoint.Zero)
+                            var lowBottles = inventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero;
+                            if (lowBottles > MyFixedPoint.Zero)
                             {
-                                continue;
+                                // All full bottles are excess
+                                excess -= lowBottles;
                             }
-
-                            var pool = workData.ExcessPools.GetValueOrNew(item.Key);
-                            pool.Add(new ExcessInfo(inventory, excess));
                         }
+                        else
+                        {
+                            excess = -CalculateAmountWanted(inventory, typeBucket.Key, excess, workData);
+                        }
+
+                        if (excess <= MyFixedPoint.Zero)
+                        {
+                            continue;
+                        }
+
+                        var pool = workData.ExcessPools.GetValueOrNew(typeBucket.Key);
+                        pool.Add(new ExcessInfo(inventory, excess));
                     }
                 }
             }
@@ -1051,7 +1069,20 @@ namespace InventorySorter
                         {
                             var inventoryExcess = pools[i];
                             // MyLog.Default.WriteLineAndConsole($"CargoSort (EXCESS): Remaining pools ({typeBucket.Key}): {pools.Count}");
+
                             var amountToBeMoved = MyFixedPoint.Min(amountWanted, inventoryExcess.Amount);
+
+                            // Skip moving bottles if they're full and the target is a bottle filler
+                            if (ShouldUseBottleFillerLogic(destInventory, typeBucket.Key))
+                            {
+                                var fullBottles = inventoryExcess.Inventory.VirtualInventory.GetValueOrDefault(typeBucket.Key) - (inventoryExcess.Inventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero);
+                                if (amountToBeMoved <= MyFixedPoint.Zero || inventoryExcess.Amount == fullBottles)
+                                {
+                                    MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping {fullBottles} full bottles {typeBucket.Key}");
+                                    continue;
+                                }
+                            }
+
                             //MyLog.Default.WriteLineAndConsole($"CargoSort: amountToBeMoved {pool.Key}: {amountToBeMoved} amountWanted {amountWanted}");
                             if (amountToBeMoved <= MyFixedPoint.Zero)
                             {
@@ -1143,7 +1174,7 @@ namespace InventorySorter
                             {
                                 if (sourceInventory == destInventory)
                                 {
-                                    // MyLog.Default.WriteLineAndConsole($"CargoSort: Source inv is same as dest inv, moving on: {destInventory.Block?.DisplayNameText}");
+                                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Source inv is same as dest inv, moving on: {destInventory.Block?.DisplayNameText}");
                                     goto nextInventory;
                                 }
 
@@ -1168,8 +1199,25 @@ namespace InventorySorter
                                 VRage.Game.ModAPI.Ingame.IMyInventory destPbInv = destInventory.RealInventory;
 
                                 // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv dest: {typeBucket.Key} {destBucket} {destInventory.Block?.DisplayNameText}");
-                                var amountToBeMoved = MyFixedPoint.Min(CalculateAmountWanted(destInventory, typeBucket.Key, virtualAmount, workData), virtualAmount);
-                                // MyLog.Default.WriteLineAndConsole($"CargoSort: Wanted: {CalculateAmountWanted(destInventory, typeBucket.Key, virtualAmount, workData)} | {virtualAmount}");
+                                var amountToBeMoved = CalculateAmountWanted(destInventory, typeBucket.Key, virtualAmount, workData);
+
+                                // Clamp to low bottles only when moving to a bottle target
+                                if (ShouldUseBottleFillerLogic(destInventory, typeBucket.Key))
+                                {
+                                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Low bottle wanted: {amountToBeMoved} | {sourceInventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero}");
+                                    amountToBeMoved = MyFixedPoint.Min(amountToBeMoved, sourceInventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero);
+                                }
+                                else if (ShouldUseBottleFillerLogic(sourceInventory, typeBucket.Key))
+                                {
+                                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Full bottle wanted: {amountToBeMoved} | {virtualAmount - (sourceInventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero)}");
+                                    amountToBeMoved = MyFixedPoint.Min(amountToBeMoved, virtualAmount - (sourceInventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero));
+                                }
+                                else
+                                {
+                                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Wanted: {amountToBeMoved} | {virtualAmount}");
+                                    amountToBeMoved = MyFixedPoint.Min(amountToBeMoved, virtualAmount);
+                                }
+
                                 if (amountToBeMoved <= MyFixedPoint.Zero)
                                 {
                                     // MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping dest due to zero movement: {destInventory.Block?.DisplayNameText}");
@@ -1211,7 +1259,6 @@ namespace InventorySorter
                 return -currentValue;
             }
 
-            MyFixedPoint virtualAmount;
             var percentFull = (float)inventoryInfo.VirtualVolume / (float)inventoryInfo.MaxVolume;
 
             var typeRequests = inventoryInfo.TypeRequests;
@@ -1221,26 +1268,48 @@ namespace InventorySorter
                 return -currentValue;
             }
 
-            if (typeRequests == TypeRequests.GasGeneratorOre)
+            if (typeRequests.HasFlag(TypeRequests.GasBottles))
             {
-                if (_allBottles.Contains(definitionId))
+                if (definitionId.TypeId == typeof(MyObjectBuilder_OxygenContainerObject) || definitionId.TypeId == typeof(MyObjectBuilder_GasContainerObject))
+                {
+                    var lowBottleCount = inventoryInfo.LowBottleCount?.GetValueOrDefault(definitionId) ?? MyFixedPoint.Zero;
+                    var bottleCount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+                    var canFit = inventoryInfo.ComputeAmountThatFits(definitionId, true);
+                    if (inventoryInfo.Block is IMyGasGenerator && Config.GasGeneratorFillPercent > 0)
+                    {
+                        canFit = MyFixedPoint.Min(canFit, inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                            Math.Min((float)inventoryInfo.VirtualVolume, (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent)),
+                            Math.Min((float)inventoryInfo.VirtualMass, (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent))));
+                    }
+
+                    return canFit - bottleCount + lowBottleCount;
+                }
+
+                if (inventoryInfo.Block is IMyGasTank)
                 {
                     return -currentValue;
                 }
+            }
 
-                virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
-
-                // <= 0 disables the feature
-                if (Config.GasGeneratorFillPercent <= 0)
+            if (typeRequests.HasFlag(TypeRequests.GasGeneratorOre))
+            {
+                // This is how Keen builds the ore and bottle constraints so it's probably ok to do it like this.
+                if (definitionId.TypeId == typeof(MyObjectBuilder_Ore))
                 {
-                    return MyFixedPoint.Zero;
+                    // <= 0 disables the feature
+                    if (Config.GasGeneratorFillPercent <= 0)
+                    {
+                        return MyFixedPoint.Zero;
+                    }
+
+                    return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
+                        ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                            (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
+                            (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId)
+                        : MyFixedPoint.Zero;
                 }
 
-                return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
-                    ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
-                        (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
-                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - virtualAmount
-                    : MyFixedPoint.Zero;
+                return -currentValue;
             }
 
             if (typeRequests == TypeRequests.AssemblerIngots)
@@ -1327,12 +1396,6 @@ namespace InventorySorter
                 return -currentValue;
             }
 
-            if (typeRequests == TypeRequests.GasTankBottles)
-            {
-                // Remove all bottles from tanks
-                return -currentValue;
-            }
-
             if (typeRequests.HasFlag(TypeRequests.SorterItems))
             {
                 var sorter = inventoryInfo.Block as IMyConveyorSorter;
@@ -1353,7 +1416,8 @@ namespace InventorySorter
                     return -currentValue;
                 }
             }
-            else if (typeRequests == TypeRequests.ReactorFuel)
+            
+            if (typeRequests == TypeRequests.ReactorFuel)
             {
                 var reactor = inventoryInfo.Block as IMyReactor;
                 if (reactor == null)
@@ -1389,7 +1453,7 @@ namespace InventorySorter
                     ((float)configuredExpected * reactor.PowerOutputMultiplier)
                 );
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel {inventoryInfo.Block?.DisplayNameText} expectedAmount {expectedAmount}");
-                virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+                var virtualAmount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
 
                 if (virtualAmount < expectedAmount * 0.5f)
                 {
@@ -1406,7 +1470,8 @@ namespace InventorySorter
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: ReactorFuel in range, returning 0 wanted");
                 return MyFixedPoint.Zero;
             }
-            else if (typeRequests == TypeRequests.ConsumableAmmo)
+
+            if (typeRequests == TypeRequests.ConsumableAmmo)
             {
                 return inventoryInfo.ComputeAmountThatFits(definitionId);
             }
@@ -1890,7 +1955,7 @@ namespace InventorySorter
 
                 var items = movement.Source.RealInventory.GetItems();
                 var needToMove = movement.Amount;
-                for (int i = items.Count - 1; i >= 0; i--)
+                for (var i = items.Count - 1; i >= 0; i--)
                 {
                     var item = items[i];
                     if (item.Content.GetId() != movement.Item)
@@ -1898,8 +1963,31 @@ namespace InventorySorter
                         continue;
                     }
 
+                    if (ShouldUseBottleFillerLogic(movement.Destination, movement.Item))
+                    {
+                        var gasContainer = item.Content as MyObjectBuilder_GasContainerObject;
+                        if (gasContainer != null)
+                        {
+                            if (gasContainer.GasLevel > 0.99)
+                            {
+                                continue;
+                            }
+                        }
+                    }
+                    else if (ShouldUseBottleFillerLogic(movement.Source, movement.Item))
+                    {
+                        var gasContainer = item.Content as MyObjectBuilder_GasContainerObject;
+                        if (gasContainer != null)
+                        {
+                            if (gasContainer.GasLevel < 1)
+                            {
+                                continue;
+                            }
+                        }
+                    }
+
                     var toTransfer = MyFixedPoint.Min(item.Amount, needToMove);
-                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
+                    MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
                     transferRequests++;
                     needToMove -= toTransfer;

@@ -399,5 +399,5 @@ FodyWeavers.xsd
 .idea
 
 # Space Engineers
-metadata.mod
 modinfo.sbmi-*
+InventorySorter.mdk.local.ini

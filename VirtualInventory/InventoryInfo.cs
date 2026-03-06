@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Sandbox.Common.ObjectBuilders.Definitions;
+using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
 using SpaceEngineers.Game.ModAPI;
@@ -8,6 +10,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Utils;
 
 namespace InventorySorter.VirtualInventory
 {
@@ -20,6 +23,7 @@ namespace InventorySorter.VirtualInventory
         public List<RequestData> Requests;
         public RequestValidationStatus RequestStatus;
         public Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
+        public Dictionary<MyDefinitionId, MyFixedPoint> LowBottleCount;
         public MyFixedPoint VirtualVolume;
         public MyFixedPoint VirtualMass;
         public readonly MyFixedPoint MaxVolume;
@@ -68,10 +72,19 @@ namespace InventorySorter.VirtualInventory
 
             foreach (var item in realInventory.GetItems())
             {
-                MyFixedPoint amount;
-                VirtualInventory.TryGetValue(item.Content.GetId(), out amount);
-                amount += item.Amount;
-                VirtualInventory[item.Content.GetId()] = amount;
+                var itemId = item.Content.GetId();
+                VirtualInventory[itemId] = VirtualInventory.GetValueOrDefault(itemId, MyFixedPoint.Zero) + item.Amount;
+
+                var bottle = item.Content as MyObjectBuilder_GasContainerObject;
+                if (bottle?.GasLevel < 1f)
+                {
+                    if (LowBottleCount == null)
+                    {
+                        LowBottleCount = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                    }
+
+                    LowBottleCount[itemId] = LowBottleCount.GetValueOrDefault(itemId, MyFixedPoint.Zero) + item.Amount;
+                }
             }
 
             var config = CargoSorterSessionComponent.Instance?.Config;
@@ -244,6 +257,26 @@ namespace InventorySorter.VirtualInventory
             {
                 TypeRequests = TypeRequests.GasGeneratorOre;
                 Priority = 0;
+                var generator = (IMyGasGenerator)Block;
+                if (Block.IsWorking && generator.AutoRefill)
+                {
+                    if (generator.IsProducing)
+                    {
+                        TypeRequests |= TypeRequests.GasBottles;
+                    }
+                    else
+                    {
+                        foreach (var item in VirtualInventory)
+                        {
+                            if (item.Key.TypeId != typeof(MyObjectBuilder_Ore) || item.Value == MyFixedPoint.Zero)
+                            {
+                                continue;
+                            }
+                            TypeRequests |= TypeRequests.GasBottles;
+                            break;
+                        }
+                    }
+                }
             }
             else if (Block is IMyAssembler) // Survival kits are OK here too
             {
@@ -273,8 +306,17 @@ namespace InventorySorter.VirtualInventory
             }
             else if (Block is IMyGasTank)
             {
-                TypeRequests = TypeRequests.GasTankBottles;
-                IsSatisfied = true;
+                var gasTank = (IMyGasTank)Block;
+                if (Block.IsWorking && gasTank.AutoRefillBottles && gasTank.FilledRatio != 0)
+                {
+                    TypeRequests = TypeRequests.GasBottles;
+                    IsSatisfied = false;
+                    Priority = 0;
+                }
+                else
+                {
+                    IsSatisfied = true;
+                }
             }
             else if (Block is IMyReactor)
             {
