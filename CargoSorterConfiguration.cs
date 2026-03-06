@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Sandbox.ModAPI;
 using VRage.Utils;
 
@@ -73,7 +74,6 @@ namespace InventorySorter
                         throw new Exception("CargoSort: Invalid mod configuration, resetting settings");
                     }
 
-                    SaveSettings(loadedSettings);
                     return loadedSettings;
                 }
                 catch (Exception e)
@@ -184,6 +184,258 @@ namespace InventorySorter
             }
 
             return str;
+        }
+
+        public static void ShowHelp()
+        {
+            var activeConfig = CargoSorterSessionComponent.Instance.Config;
+            var sb = new StringBuilder();
+            sb.AppendLine("Format:")
+                .AppendLine("OptionName: Current Value (default)")
+                .AppendLine("Description: A description of the parameter")
+                .AppendLine("Use '/configuresort OptionName \"New Value\"' to change options")
+                .AppendLine()
+                .AppendLine("Type Container Keywords")
+                .AppendLine()
+                .Append("SpecialContainerKeyword: ").Append(activeConfig.SpecialContainerKeyword).Append(" (").Append(DefaultSpecialContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container to mark it as Special.")
+                .AppendLine()
+                .Append("LimitedContainerKeyword: ").Append(activeConfig.LimitedContainerKeyword).Append(" (").Append(DefaultLimitedContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container to mark it as Limited.")
+                .AppendLine()
+                .Append("OreContainerKeyword: ").Append(activeConfig.OreContainerKeyword).Append(" (").Append(DefaultOreContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Ore.")
+                .AppendLine()
+                .Append("IngotContainerKeyword: ").Append(activeConfig.IngotContainerKeyword).Append(" (").Append(DefaultIngotContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Ingot.")
+                .AppendLine()
+                .Append("ComponentContainerKeyword: ").Append(activeConfig.ComponentContainerKeyword).Append(" (").Append(DefaultComponentContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Component.")
+                .AppendLine()
+                .Append("AmmoContainerKeyword: ").Append(activeConfig.AmmoContainerKeyword).Append(" (").Append(DefaultAmmoContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Ammo.")
+                .AppendLine()
+                .Append("ToolContainerKeyword: ").Append(activeConfig.ToolContainerKeyword).Append(" (").Append(DefaultToolContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Tools.")
+                .AppendLine()
+                .Append("BottleContainerKeyword: ").Append(activeConfig.BottleContainerKeyword).Append(" (").Append(DefaultBottleContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Bottles.")
+                .AppendLine()
+                .Append("ConsumablesContainerKeyword: ").Append(activeConfig.ConsumablesContainerKeyword).Append(" (").Append(DefaultConsumablesContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Consumables (cooked food, medicine).")
+                .AppendLine()
+                .Append("IngredientsContainerKeyword: ").Append(activeConfig.IngredientsContainerKeyword).Append(" (").Append(DefaultIngredientsContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any Ingredients (raw food, seeds).")
+                .AppendLine()
+                .Append("AnyContainerKeyword: ").Append(activeConfig.AnyContainerKeyword).Append(" (").Append(DefaultAnyContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that should contain any type of item.")
+                .AppendLine()
+                .Append("QuotaContainerKeyword: ").Append(activeConfig.QuotaContainerKeyword).Append(" (").Append(DefaultQuotaContainerKeyword).AppendLine(")")
+                .AppendLine("Keyword to put in the name of a container that allows the contents to count toward fulfilling production quotas.")
+                .AppendLine(activeConfig.QuotaContainerKeyword)
+                .AppendLine()
+                .Append("LockedContainerKeywords: ").Append(string.Join(", ", activeConfig.LockedContainerKeywords)).Append(" (").Append(string.Join(", ", DefaultLockedContainerKeywords)).AppendLine(")")
+                .AppendLine("Keywords to put in a block's name to make the sorter ignore it")
+                .AppendLine();
+
+            sb.AppendLine()
+                .AppendLine("Feature Settings:")
+                .AppendLine()
+                .Append("GasGeneratorFillPercent: ").Append(activeConfig.GasGeneratorFillPercent * 100).Append(" (").Append(80).AppendLine(")")
+                .AppendLine("Fill gas generators to the configured volume percentage with ice (0 to disable).")
+                .AppendLine()
+                .Append("ExpectedLargeGridReactorFuel: ").Append(activeConfig.ExpectedLargeGridReactorFuel).Append(" (").Append(100).AppendLine(")")
+                .AppendLine("Fill large grid reactors with this many units of fuel.")
+                .AppendLine()
+                .Append("ExpectedLargeGridReactorFuel: ").Append(activeConfig.ExpectedSmallGridReactorFuel).Append(" (").Append(25).AppendLine(")")
+                .AppendLine("Fill small grid reactors with this many units of fuel.")
+                .AppendLine()
+                .Append("AllowSpecialSteal: ").Append(activeConfig.AllowSpecialSteal).Append(" (").Append(true).AppendLine(")")
+                .AppendLine("Allow higher priority Special containers to steal from lower priority Special containers.")
+                .AppendLine()
+                .Append("ShowProgressNotifications: ").Append(activeConfig.ShowProgressNotifications).Append(" (").Append(true).AppendLine(")")
+                .AppendLine("Show sorter results in in game chat when using /sort.")
+                .AppendLine()
+                .Append("ShowMissingItems: ").Append(activeConfig.ShowMissingItems).Append(" (").Append(true).AppendLine(")")
+                .AppendLine("Show missing item messages in game chat when using /sort.")
+                .AppendLine()
+                .Append("CopyResultsToClipboard: ").Append(activeConfig.CopyResultsToClipboard).Append(" (").Append(false).AppendLine(")")
+                .AppendLine("Allow copying results from popups to the system clipboard.")
+                .AppendLine()
+                .Append("AutoSortFrequencySeconds: ").Append(activeConfig.AutoSortFrequencySeconds).Append(" (").Append(10).AppendLine(")")
+                .AppendLine("WIP: Grid-local auto sorting frequency in seconds, minimum 5.");
+            MyAPIGateway.Utilities.ShowMissionScreen("Inventory Sorter", string.Empty, "Settings",
+                sb.ToString());
+        }
+
+
+        public static void ChangeSettingsFromChat(string option, string value)
+        {
+            var newConfig = LoadSettings();
+
+            if (string.Equals(option, "SpecialContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.SpecialContainerKeyword = value;
+            }
+            else if (string.Equals(option, "LimitedContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.LimitedContainerKeyword = value;
+            }
+            else if (string.Equals(option, "OreContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.OreContainerKeyword = value;
+            }
+            else if (string.Equals(option, "IngotContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.IngotContainerKeyword = value;
+            }
+            else if (string.Equals(option, "ComponentContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.ComponentContainerKeyword = value;
+            }
+            else if (string.Equals(option, "ToolContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.ToolContainerKeyword = value;
+            }
+            else if (string.Equals(option, "AmmoContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.AmmoContainerKeyword = value;
+            }
+            else if (string.Equals(option, "BottleContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.BottleContainerKeyword = value;
+            }
+            else if (string.Equals(option, "ConsumablesContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.ConsumablesContainerKeyword = value;
+            }
+            else if (string.Equals(option, "IngredientsContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.IngredientsContainerKeyword = value;
+            }
+            else if (string.Equals(option, "AnyContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.AnyContainerKeyword = value;
+            }
+            else if (string.Equals(option, "QuotaContainerKeyword", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.QuotaContainerKeyword = value;
+            }
+            else if (string.Equals(option, "LockedContainerKeywords", StringComparison.OrdinalIgnoreCase))
+            {
+                newConfig.LockedContainerKeywords = value.Split(',').Select(v => v.Trim()).ToList();
+            }
+            else if (string.Equals(option, "GasGeneratorFillPercent", StringComparison.OrdinalIgnoreCase))
+            {
+                int parsedValue;
+                if (int.TryParse(value, out parsedValue))
+                {
+                    newConfig.GasGeneratorFillPercent = parsedValue / 100f;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer.");
+                }
+            }
+            else if (string.Equals(option, "ExpectedLargeGridReactorFuel", StringComparison.OrdinalIgnoreCase))
+            {
+                int parsedValue;
+                if (int.TryParse(value, out parsedValue))
+                {
+                    newConfig.ExpectedLargeGridReactorFuel = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer.");
+                }
+            }
+            else if (string.Equals(option, "ExpectedSmallGridReactorFuel", StringComparison.OrdinalIgnoreCase))
+            {
+                int parsedValue;
+                if (int.TryParse(value, out parsedValue))
+                {
+                    newConfig.ExpectedSmallGridReactorFuel = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer.");
+                }
+            }
+            else if (string.Equals(option, "AllowSpecialSteal", StringComparison.OrdinalIgnoreCase))
+            {
+                bool parsedValue;
+                if (bool.TryParse(value, out parsedValue))
+                {
+                    newConfig.AllowSpecialSteal = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                }
+            }
+            else if (string.Equals(option, "ShowProgressNotifications", StringComparison.OrdinalIgnoreCase))
+            {
+                bool parsedValue;
+                if (bool.TryParse(value, out parsedValue))
+                {
+                    newConfig.ShowProgressNotifications = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                }
+            }
+            else if (string.Equals(option, "ShowMissingItems", StringComparison.OrdinalIgnoreCase))
+            {
+                bool parsedValue;
+                if (bool.TryParse(value, out parsedValue))
+                {
+                    newConfig.ShowMissingItems = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                }
+            }
+            else if (string.Equals(option, "CopyResultsToClipboard", StringComparison.OrdinalIgnoreCase))
+            {
+                bool parsedValue;
+                if (bool.TryParse(value, out parsedValue))
+                {
+                    newConfig.CopyResultsToClipboard = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                }
+            }
+            else if (string.Equals(option, "AutoSortFrequencySeconds", StringComparison.OrdinalIgnoreCase))
+            {
+                int parsedValue;
+                if (int.TryParse(value, out parsedValue) && parsedValue >= 5)
+                {
+                    newConfig.AutoSortFrequencySeconds = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"CargoSort: Failed to parse {value} as an integer.");
+                }
+            }
+            else
+            {
+                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown config option {value}. Run '/configuresort help' to see the list.");
+            }
+
+            if (newConfig.Validate())
+            {
+                SaveSettings(newConfig);
+                CargoSorterSessionComponent.Instance.LoadSettings();
+                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Saved and applied new settings!");
+            }
+            else
+            {
+                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to change settings!");
+            }
         }
     }
 }

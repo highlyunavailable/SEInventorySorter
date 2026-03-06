@@ -74,7 +74,7 @@ namespace InventorySorter
 
             MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
 
-            Config = CargoSorterConfiguration.LoadSettings();
+            LoadSettings();
 
             Instance = this;
 
@@ -494,6 +494,38 @@ namespace InventorySorter
                 }
 
                 Util.SplitCustomData(shipController.CubeGrid, matches[1].Value, matches[2].Value, matches.Count == 4 ? matches[3].Value : null);
+            }
+            else if (messageText.StartsWith("/configuresorter", StringComparison.OrdinalIgnoreCase))
+            {
+                sendToOthers = false;
+
+                if (_jobTask.valid && !_jobTask.IsComplete)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "Cannot change settings while a job is in progress!");
+                    return;
+                }
+
+                var matches = QuotedParsePattern.Matches(messageText);
+
+                if (matches.Count < 2 || matches.Count >= 4)
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", "Incorrect chat configuration command. To see valid arguments, run '/configuresorter help'.");
+                    return;
+                }
+
+                if (matches[1].Value.Equals("help", StringComparison.OrdinalIgnoreCase))
+                {
+                    CargoSorterConfiguration.ShowHelp();
+                    return;
+                }
+
+                if (matches.Count == 3)
+                {
+                    CargoSorterConfiguration.ChangeSettingsFromChat(matches[1].Value, matches[2].Value);
+                    return;
+                }
+
+                MyAPIGateway.Utilities.ShowMessage("Sorter", "Incorrect chat configuration command. To see valid arguments, run '/configuresorter help'.");
             }
         }
 
@@ -1415,7 +1447,7 @@ namespace InventorySorter
                     return -currentValue;
                 }
             }
-            
+
             if (typeRequests == TypeRequests.ReactorFuel)
             {
                 var reactor = inventoryInfo.Block as IMyReactor;
@@ -2945,6 +2977,18 @@ namespace InventorySorter
             }
 
             return _wcAmmoMagazines.GetValueOrDefault(activeAmmo);
+        }
+
+        public void LoadSettings()
+        {
+            try
+            {
+                Config = CargoSorterConfiguration.LoadSettings();
+            }
+            catch (Exception e)
+            {
+                MyLog.Default.WriteLineAndConsole($"CargoSort: Exception loading settings: {e.Message}");
+            }
         }
     }
 }
