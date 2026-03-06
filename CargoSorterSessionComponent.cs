@@ -1078,7 +1078,6 @@ namespace InventorySorter
                                 var fullBottles = inventoryExcess.Inventory.VirtualInventory.GetValueOrDefault(typeBucket.Key) - (inventoryExcess.Inventory.LowBottleCount?.GetValueOrDefault(typeBucket.Key) ?? MyFixedPoint.Zero);
                                 if (amountToBeMoved <= MyFixedPoint.Zero || inventoryExcess.Amount == fullBottles)
                                 {
-                                    MyLog.Default.WriteLineAndConsole($"CargoSort: Skipping {fullBottles} full bottles {typeBucket.Key}");
                                     continue;
                                 }
                             }
@@ -1987,7 +1986,7 @@ namespace InventorySorter
                     }
 
                     var toTransfer = MyFixedPoint.Min(item.Amount, needToMove);
-                    MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
+                    //MyLog.Default.WriteLineAndConsole($"CargoSort: Movement from: {movement.Source.Block?.DisplayNameText} ({movement.Source.TypeRequests}, P{movement.Source.Priority}) To: {movement.Destination.Block?.DisplayNameText} ({movement.Destination.TypeRequests}, P{movement.Destination.Priority}): {item.Content.TypeId}/{item.Content.SubtypeName} {toTransfer}");
                     MyInventory.TransferByUser(movement.Source.RealInventory, movement.Destination.RealInventory, item.ItemId, amount: toTransfer);
                     transferRequests++;
                     needToMove -= toTransfer;
