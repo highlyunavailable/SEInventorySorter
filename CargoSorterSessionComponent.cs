@@ -2828,7 +2828,7 @@ namespace InventorySorter
                 controls.AddRange(ProjectorTerminalControls.Controls);
             }
 
-            if (CargoTerminalControls.CanFitInCharacterInventory(block))
+            if (CargoTerminalControls.AllowSwapInventory(block))
             {
                 CargoTerminalControls.EnsureControlSetup();
                 controls.AddRange(CargoTerminalControls.Controls);
