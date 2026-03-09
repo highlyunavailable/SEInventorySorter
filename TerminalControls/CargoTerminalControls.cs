@@ -71,8 +71,8 @@ namespace InventorySorter.TerminalControls
 
             if (containerInventory == null ||
                 characterInventory == null ||
-                containerInventory.CurrentVolume > characterInventory.MaxVolume - characterInventory.CurrentVolume ||
-                characterInventory.CurrentVolume > containerInventory.MaxVolume - containerInventory.CurrentVolume)
+                containerInventory.CurrentVolume > characterInventory.MaxVolume ||
+                characterInventory.CurrentVolume > containerInventory.MaxVolume)
             {
                 return;
             }
@@ -138,10 +138,10 @@ namespace InventorySorter.TerminalControls
             var containerInventory = block.GetInventory(0) as MyInventory;
             var characterInventory = character.GetInventory(0) as MyInventory;
 
-            return containerInventory == null ||
-                   characterInventory == null ||
-                   containerInventory.CurrentVolume > characterInventory.MaxVolume - characterInventory.CurrentVolume ||
-                   characterInventory.CurrentVolume > containerInventory.MaxVolume - containerInventory.CurrentVolume;
+            return containerInventory != null &&
+                   characterInventory != null &&
+                   containerInventory.CurrentVolume <= characterInventory.MaxVolume &&
+                   characterInventory.CurrentVolume <= containerInventory.MaxVolume;
         }
     }
 }
