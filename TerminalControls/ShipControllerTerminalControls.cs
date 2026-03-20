@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using InventorySorter;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -14,7 +13,7 @@ using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRage.Game;
 
-namespace CargoSorter
+namespace InventorySorter
 {
     public static class ShipControllerTerminalControls
     {

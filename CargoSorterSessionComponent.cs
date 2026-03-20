@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using CargoSorter;
 using CoreSystems.Api;
 using InventorySorter.TerminalControls;
 using InventorySorter.VirtualInventory;
@@ -747,6 +746,7 @@ namespace InventorySorter
                         {
                             continue;
                         }
+
                         GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData, inventories);
                     }
                 }
@@ -762,6 +762,7 @@ namespace InventorySorter
                         {
                             continue;
                         }
+
                         // MyLog.Default.WriteLineAndConsole($"Gathering inventories for {cubeGrid.CustomName}");
                         GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData, inventories);
                     }
@@ -870,10 +871,30 @@ namespace InventorySorter
                             continue;
                         }
 
-                        // ReSharper disable once PossibleNullReferenceException
-                        var wantedAmmo = inventory.Constraint.ConstrainedIds.Count == 1
-                            ? inventory.Constraint.ConstrainedIds.First() // Use the single possibility if there is one
-                            : GetActiveAmmo(inventoryInfo.Block as MyEntity); // Try WC since we can have more than 1 ammo!
+                        if (!inventoryInfo.Block.IsFunctional)
+                        {
+                            continue;
+                        }
+
+                        var wantedAmmo = default(MyDefinitionId);
+                        if (inventory.Constraint?.ConstrainedIds != null)
+                        {
+                            // ReSharper disable once PossibleNullReferenceException
+                            if (inventory.Constraint.ConstrainedIds.Count == 1)
+                            {
+                                // Take the first.
+                                foreach (var id in inventory.Constraint.ConstrainedIds)
+                                {
+                                    wantedAmmo = id;
+                                    break;
+                                }
+                            }
+                            else
+                            {
+                                wantedAmmo = GetActiveAmmo(inventoryInfo.Block);
+                            }
+                        }
+
                         // Ignore weaponcore energy "ammo" or empty ammos which can happen if WC fails
                         if (wantedAmmo == default(MyDefinitionId) || wantedAmmo == IgnoredEnergyAmmoDefinitionId)
                         {
@@ -881,7 +902,6 @@ namespace InventorySorter
                         }
 
                         var wantedAmount = inventoryInfo.ComputeAmountThatCouldFit(wantedAmmo, true);
-
                         if (wantedAmount <= MyFixedPoint.Zero || wantedAmount >= MyFixedPoint.MaxValue)
                         {
                             continue;
@@ -2984,14 +3004,14 @@ namespace InventorySorter
         }
 
         // Get the active ammo for a WC weapon
-        private MyDefinitionId GetActiveAmmo(MyEntity weapon, int weaponId = 0)
+        private MyDefinitionId GetActiveAmmo(IMyTerminalBlock weapon, int weaponId = 0)
         {
             if (!Util.IsValid(weapon) || _wcAmmoMagazines.Count == 0 || !_wcApi.IsReady)
             {
                 return default(MyDefinitionId);
             }
 
-            var activeAmmo = _wcApi.GetActiveAmmo(weapon, weaponId);
+            var activeAmmo = _wcApi.GetActiveAmmo(weapon as MyEntity, weaponId);
 
             if (string.IsNullOrEmpty(activeAmmo))
             {
