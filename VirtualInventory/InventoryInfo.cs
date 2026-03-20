@@ -16,14 +16,14 @@ namespace InventorySorter.VirtualInventory
 {
     public class InventoryInfo
     {
-        private static readonly char[] sectionEndCharacters = { '\r', '\n', ']' };
-        private static readonly MyIni iniParser = new MyIni();
+        private static readonly char[] SectionEndCharacters = { '\r', '\n', ']' };
+        private static readonly MyIni IniParser = new MyIni();
         public byte Priority;
-        public TypeRequests TypeRequests;
+        public readonly TypeRequests TypeRequests;
         public List<RequestData> Requests;
         public RequestValidationStatus RequestStatus;
-        public Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
-        public Dictionary<MyDefinitionId, MyFixedPoint> LowBottleCount;
+        public readonly Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
+        public readonly Dictionary<MyDefinitionId, MyFixedPoint> LowBottleCount;
         public MyFixedPoint VirtualVolume;
         public MyFixedPoint VirtualMass;
         public readonly MyFixedPoint MaxVolume;
@@ -45,7 +45,12 @@ namespace InventorySorter.VirtualInventory
             MaxVolume = realInventory.MaxVolume;
             MaxMass = realInventory.MaxMass;
             Constraint = realInventory.Constraint;
+            RealInventory = realInventory;
+            // Require conveyors for weapons always since some weapons are balanced by being manually reloadable only.
+            SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
+            IsSatisfied = false;
 
+            // Generate constraint like Keen does since it's not an inventory constraint
             if (Constraint == null && Block is IMyConveyorSorter)
             {
                 var sorter = Block as IMyConveyorSorter;
@@ -64,11 +69,6 @@ namespace InventorySorter.VirtualInventory
                     }
                 }
             }
-
-            RealInventory = realInventory;
-            // Require conveyors for weapons always since some weapons are balanced by being manually reloadable only.
-            SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
-            IsSatisfied = false;
 
             foreach (var item in realInventory.GetItems())
             {
@@ -272,6 +272,7 @@ namespace InventorySorter.VirtualInventory
                             {
                                 continue;
                             }
+
                             TypeRequests |= TypeRequests.GasBottles;
                             break;
                         }
@@ -446,26 +447,26 @@ namespace InventorySorter.VirtualInventory
                 return quotaParseResult;
             }
 
-            iniParser.Clear();
+            IniParser.Clear();
             if (!skipCreate && IsCustomDataEmpty(Block.CustomData))
             {
-                Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, iniParser);
+                Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, IniParser);
             }
-            else if (!iniParser.TryParse(Block.CustomData, out quotaParseResult))
+            else if (!IniParser.TryParse(Block.CustomData, out quotaParseResult))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
                 RequestStatus |= RequestValidationStatus.InvalidCustomData;
                 return quotaParseResult;
             }
 
-            if (!skipCreate && !iniParser.ContainsSection(sectionName))
+            if (!skipCreate && !IniParser.ContainsSection(sectionName))
             {
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} has no {sectionName} config section");
-                Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, iniParser);
+                Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, IniParser);
             }
 
             var iniKeys = new List<MyIniKey>();
-            iniParser.GetKeys(sectionName, iniKeys);
+            IniParser.GetKeys(sectionName, iniKeys);
             var priorRequests = Requests?.Count > 0 ? Requests : null;
             if (Requests == null || priorRequests != null)
             {
@@ -484,7 +485,7 @@ namespace InventorySorter.VirtualInventory
                 // Allow forcing a new priority with a special key
                 if (iniKey.Name.Equals("Priority", StringComparison.OrdinalIgnoreCase))
                 {
-                    var newPriority = iniParser.Get(iniKey).ToByte(byte.MaxValue);
+                    var newPriority = IniParser.Get(iniKey).ToByte(byte.MaxValue);
                     Priority = newPriority;
                     continue;
                 }
@@ -503,7 +504,7 @@ namespace InventorySorter.VirtualInventory
                     continue;
                 }
 
-                var value = iniParser.Get(iniKey);
+                var value = IniParser.Get(iniKey);
                 // MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
                 if (string.IsNullOrWhiteSpace(valueString))
@@ -559,7 +560,7 @@ namespace InventorySorter.VirtualInventory
                 }
             }
 
-            iniParser.Clear();
+            IniParser.Clear();
             if (priorRequests == null)
             {
                 return quotaParseResult;

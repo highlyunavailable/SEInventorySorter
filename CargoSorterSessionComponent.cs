@@ -743,6 +743,10 @@ namespace InventorySorter
                     workData.RootGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(grids);
                     foreach (var cubeGrid in grids)
                     {
+                        if (!Util.IsValid(cubeGrid))
+                        {
+                            continue;
+                        }
                         GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData, inventories);
                     }
                 }
@@ -754,6 +758,10 @@ namespace InventorySorter
 
                     foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                     {
+                        if (!Util.IsValid(cubeGrid))
+                        {
+                            continue;
+                        }
                         // MyLog.Default.WriteLineAndConsole($"Gathering inventories for {cubeGrid.CustomName}");
                         GatherInventory(cubeGrid.GetFatBlocks<IMyTerminalBlock>(), workData, inventories);
                     }
@@ -783,9 +791,14 @@ namespace InventorySorter
                     continue;
                 }
 
-                for (int i = 0; i < block.InventoryCount; i++)
+                for (var i = 0; i < block.InventoryCount; i++)
                 {
                     var inventory = block.GetInventory(i) as MyInventory;
+                    if (inventory == null)
+                    {
+                        continue;
+                    }
+
                     var inventoryInfo = new InventoryInfo(inventory, workData.SectionName);
                     if (inventoryInfo.TypeRequests == TypeRequests.Nothing && (inventoryInfo.VirtualInventory.Count == 0 || !inventoryInfo.SupportsConveyors))
                     {
@@ -795,14 +808,11 @@ namespace InventorySorter
 
                     // MyLog.Default.WriteLineAndConsole($"Adding inventory info for {block.DisplayNameText}");
                     outInventories.Add(inventoryInfo);
-                    if (inventoryInfo.VirtualInventory?.Count > 0)
+                    foreach (var definitionId in inventoryInfo.VirtualInventory.Keys)
                     {
-                        foreach (var definitionId in inventoryInfo.VirtualInventory.Keys)
+                        if (!workData.TypeBuckets.ContainsKey(definitionId))
                         {
-                            if (!workData.TypeBuckets.ContainsKey(definitionId))
-                            {
-                                workData.TypeBuckets[definitionId] = new List<InventoryBucket>();
-                            }
+                            workData.TypeBuckets[definitionId] = new List<InventoryBucket>();
                         }
                     }
 
@@ -899,6 +909,11 @@ namespace InventorySorter
 
                     var bucketFlags = InventoryBucketFlags.None;
 
+                    if ((inventory.Block as IMyGasGenerator)?.AutoRefill == true || (inventory.Block as IMyGasTank)?.AutoRefillBottles == true)
+                    {
+                        bucketFlags |= InventoryBucketFlags.BottleFiller;
+                    }
+
                     if (inventory.TypeRequests.HasFlag(TypeRequests.Special))
                     {
                         bucketFlags |= InventoryBucketFlags.Special;
@@ -932,8 +947,15 @@ namespace InventorySorter
                 var typeHash = unchecked((int)crc.GetCrc(typeBuckets.Key.ToString()));
                 typeBuckets.Value.SortNoAlloc((x, y) =>
                 {
+                    // Fillers go first
+                    var comparison = y.Flags.HasFlag(InventoryBucketFlags.BottleFiller).CompareTo(x.Flags.HasFlag(InventoryBucketFlags.BottleFiller));
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+
                     // Specials go first
-                    var comparison = y.Flags.HasFlag(InventoryBucketFlags.Special).CompareTo(x.Flags.HasFlag(InventoryBucketFlags.Special));
+                    comparison = y.Flags.HasFlag(InventoryBucketFlags.Special).CompareTo(x.Flags.HasFlag(InventoryBucketFlags.Special));
                     if (comparison != 0)
                     {
                         return comparison;
@@ -1215,7 +1237,7 @@ namespace InventorySorter
                                     continue;
                                 }
 
-                                if (sourceBucket.Flags.HasFlag(InventoryBucketFlags.Special) && (!Config.AllowSpecialSteal || !destBucket.Flags.HasFlag(InventoryBucketFlags.Special)))
+                                if (sourceBucket.Flags.HasFlag(InventoryBucketFlags.Special) && (!Config.AllowSpecialSteal || !destBucket.Flags.HasFlag(InventoryBucketFlags.Special)) && !destBucket.Flags.HasFlag(InventoryBucketFlags.BottleFiller))
                                 {
                                     // MyLog.Default.WriteLineAndConsole($"CargoSort: Inv destination skipped due to not being special: {destInventory.Block?.DisplayNameText}");
                                     continue;

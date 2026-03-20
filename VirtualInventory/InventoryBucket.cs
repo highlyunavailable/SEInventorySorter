@@ -7,8 +7,9 @@ namespace InventorySorter.VirtualInventory
     internal enum InventoryBucketFlags : byte
     {
         None = 0,
-        Special = 1 << 0,
-        Shuffle = 1 << 1,
+        BottleFiller =  1 << 0,
+        Special = 1 << 1,
+        Shuffle = 1 << 2,
     }
 
     internal class InventoryBucket
