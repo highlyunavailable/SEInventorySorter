@@ -1366,23 +1366,28 @@ namespace InventorySorter
 
             if (typeRequests.HasFlag(TypeRequests.GasGeneratorOre))
             {
-                // This is how Keen builds the ore and bottle constraints so it's probably ok to do it like this.
-                if (definitionId.TypeId == typeof(MyObjectBuilder_Ore))
+                if ((inventoryInfo.Constraint != null && !inventoryInfo.Constraint.Check(definitionId)) ||
+                    definitionId.TypeId == typeof(MyObjectBuilder_OxygenContainerObject) ||
+                    definitionId.TypeId == typeof(MyObjectBuilder_GasContainerObject))
                 {
-                    // <= 0 disables the feature
-                    if (Config.GasGeneratorFillPercent <= 0)
-                    {
-                        return MyFixedPoint.Zero;
-                    }
-
-                    return percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f)
-                        ? inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
-                            (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
-                            (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)) - inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId)
-                        : MyFixedPoint.Zero;
+                    return -currentValue;
                 }
 
-                return -currentValue;
+                // <= 0 disables the feature
+                if (Config.GasGeneratorFillPercent <= 0)
+                {
+                    return MyFixedPoint.Zero;
+                }
+
+                if (percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f))
+                {
+                    return inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                        (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
+                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)
+                    ) - inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
+                }
+
+                return MyFixedPoint.Zero;
             }
 
             if (typeRequests == TypeRequests.AssemblerIngots)

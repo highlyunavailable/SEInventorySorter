@@ -328,13 +328,14 @@ namespace InventorySorter
             else if (string.Equals(option, "GasGeneratorFillPercent", StringComparison.OrdinalIgnoreCase))
             {
                 int parsedValue;
-                if (int.TryParse(value, out parsedValue))
+                if (int.TryParse(value, out parsedValue) && parsedValue >= 0 && parsedValue <= 100)
                 {
                     newConfig.GasGeneratorFillPercent = parsedValue / 100f;
                 }
                 else
                 {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer.");
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer or valid value. Value must be 0-100 inclusive.");
+                    return;
                 }
             }
             else if (string.Equals(option, "ExpectedLargeGridReactorFuel", StringComparison.OrdinalIgnoreCase))
@@ -347,6 +348,7 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer.");
+                    return;
                 }
             }
             else if (string.Equals(option, "ExpectedSmallGridReactorFuel", StringComparison.OrdinalIgnoreCase))
@@ -359,6 +361,7 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as an integer.");
+                    return;
                 }
             }
             else if (string.Equals(option, "AllowSpecialSteal", StringComparison.OrdinalIgnoreCase))
@@ -371,6 +374,7 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                    return;
                 }
             }
             else if (string.Equals(option, "ShowProgressNotifications", StringComparison.OrdinalIgnoreCase))
@@ -383,6 +387,7 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                    return;
                 }
             }
             else if (string.Equals(option, "ShowMissingItems", StringComparison.OrdinalIgnoreCase))
@@ -395,6 +400,7 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                    return;
                 }
             }
             else if (string.Equals(option, "CopyResultsToClipboard", StringComparison.OrdinalIgnoreCase))
@@ -407,6 +413,7 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
+                    return;
                 }
             }
             else if (string.Equals(option, "AutoSortFrequencySeconds", StringComparison.OrdinalIgnoreCase))
@@ -418,12 +425,14 @@ namespace InventorySorter
                 }
                 else
                 {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"CargoSort: Failed to parse {value} as an integer.");
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"CargoSort: Failed to parse {value} as an integer or valid value. Value must be >= 5.");
+                    return;
                 }
             }
             else
             {
                 MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown config option {value}. Run '/configuresort help' to see the list.");
+                return;
             }
 
             if (newConfig.Validate())
@@ -434,7 +443,7 @@ namespace InventorySorter
             }
             else
             {
-                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to change settings!");
+                MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to validate new settings!");
             }
         }
     }

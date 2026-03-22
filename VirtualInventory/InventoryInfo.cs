@@ -268,7 +268,9 @@ namespace InventorySorter.VirtualInventory
                     {
                         foreach (var item in VirtualInventory)
                         {
-                            if (item.Key.TypeId != typeof(MyObjectBuilder_Ore) || item.Value == MyFixedPoint.Zero)
+                            if (item.Key.TypeId == typeof(MyObjectBuilder_OxygenContainerObject) ||
+                                item.Key.TypeId == typeof(MyObjectBuilder_GasContainerObject) ||
+                                item.Value == MyFixedPoint.Zero)
                             {
                                 continue;
                             }
