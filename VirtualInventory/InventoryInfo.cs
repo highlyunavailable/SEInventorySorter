@@ -97,7 +97,7 @@ namespace InventorySorter.VirtualInventory
             if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
-                ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != "Inventory");
+                ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != string.Empty);
             }
             else
             {
@@ -151,11 +151,11 @@ namespace InventorySorter.VirtualInventory
                 if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
-                    ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != "Inventory");
+                    ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != string.Empty);
                 }
             }
 
-            if (sectionName != "Inventory" && Block.CustomData.InsensitiveContains(sectionName))
+            if (sectionName != string.Empty && Block.CustomData.InsensitiveContains(sectionName))
             {
                 TypeRequests = TypeRequests.Special;
                 ConfigParseResult = ParseCustomDataRequests(sectionName);

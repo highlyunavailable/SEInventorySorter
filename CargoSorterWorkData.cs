@@ -34,7 +34,7 @@ namespace InventorySorter
             RootGrid = cubeGrid;
             ConstructOnly = constructOnly;
             ResultsType = resultsDisplayType;
-            SectionName = string.IsNullOrEmpty(profile) ? "Inventory" : $"Inventory:{profile}";
+            SectionName = string.IsNullOrEmpty(profile) ? string.Empty : $"Inventory:{profile}";
         }
     }
 

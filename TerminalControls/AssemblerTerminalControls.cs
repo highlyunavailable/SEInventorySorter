@@ -175,7 +175,7 @@ namespace InventorySorter.TerminalControls
             {
                 var queued = CargoSorterSessionComponent.Instance.GenerateQueueFromCustomData(block as IMyAssembler);
 
-                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", null, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
+                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", string.Empty, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
             }
         }
 

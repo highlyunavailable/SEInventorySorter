@@ -164,7 +164,7 @@ namespace InventorySorter
                 return;
             }
 
-            var sectionName = profile == null ? "Inventory" : $"Inventory:{profile}";
+            var sectionName = profile == null ? string.Empty : $"Inventory:{profile}";
 
             var sourceInfo = new InventoryInfo((MyInventory)sourceBlocks[0].GetInventory(0), sectionName);
             if (!sourceInfo.ConfigParseResult.Success)

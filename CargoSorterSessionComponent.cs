@@ -659,7 +659,7 @@ namespace InventorySorter
 
         public bool GenerateQueueFromCustomData(IMyAssembler assembler)
         {
-            var inputInventory = assembler?.InputInventory as MyInventory;
+            var inputInventory = assembler?.OutputInventory as MyInventory;
             if (inputInventory == null)
             {
                 return false;
