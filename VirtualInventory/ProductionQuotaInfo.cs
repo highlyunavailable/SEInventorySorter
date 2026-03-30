@@ -31,11 +31,11 @@ namespace InventorySorter.VirtualInventory
 
             // Determine if we have a quota group as part of the assembler name
             const string tag = "[Primary:";
-            var groupStartIndex = block.DisplayNameText.IndexOf(tag);
+            var groupStartIndex = block.DisplayNameText.IndexOf(tag, StringComparison.Ordinal);
             if (groupStartIndex > -1)
             {
                 groupStartIndex += tag.Length;
-                var groupEnd = block.DisplayNameText.IndexOf("]", groupStartIndex);
+                var groupEnd = block.DisplayNameText.IndexOf("]", groupStartIndex, StringComparison.Ordinal);
                 if (groupEnd > 0)
                 {
                     GroupName = block.DisplayNameText.Substring(groupStartIndex, groupEnd - groupStartIndex);
