@@ -242,9 +242,6 @@ namespace InventorySorter
             sb.AppendLine()
                 .AppendLine("Feature Settings:")
                 .AppendLine()
-                .Append("DisableShowItemName: ").Append(activeConfig.DisableShowItemName).Append(" (").Append(true).AppendLine(")")
-                .AppendLine("Disable showing the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).")
-                .AppendLine()
                 .Append("GasGeneratorFillPercent: ").Append(activeConfig.GasGeneratorFillPercent * 100).Append(" (").Append(80).AppendLine(")")
                 .AppendLine("Fill gas generators to the configured volume percentage with ice (0 to disable).")
                 .AppendLine()
@@ -267,7 +264,10 @@ namespace InventorySorter
                 .AppendLine("Allow copying results from popups to the system clipboard.")
                 .AppendLine()
                 .Append("AutoSortFrequencySeconds: ").Append(activeConfig.AutoSortFrequencySeconds).Append(" (").Append(10).AppendLine(")")
-                .AppendLine("WIP: Grid-local auto sorting frequency in seconds, minimum 5.");
+                .AppendLine("WIP: Grid-local auto sorting frequency in seconds, minimum 5.")
+                .Append("DisableShowItemName: ").Append(activeConfig.DisableShowItemName).Append(" (").Append(false).AppendLine(")")
+                .AppendLine("Disable showing the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).")
+                .AppendLine();
             MyAPIGateway.Utilities.ShowMissionScreen("Inventory Sorter", string.Empty, "Settings",
                 sb.ToString());
         }
