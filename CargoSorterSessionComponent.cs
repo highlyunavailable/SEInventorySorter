@@ -63,6 +63,8 @@ namespace InventorySorter
         private IMyShipController _autoSortingController;
         private string _autoSortProfile;
         private int _autoSortTicksRemaining;
+        public Dictionary<MyDefinitionId, MyFixedPoint> LastMissingItems { get; private set; } = new Dictionary<MyDefinitionId, MyFixedPoint>();
+        public long LastSortTick { get; private set; }
 
         public override void LoadData()
         {
@@ -343,15 +345,20 @@ namespace InventorySorter
             return definitionId.TypeId.ToString().Replace(MyObjectBuilderType.LEGACY_TYPE_PREFIX, "");
         }
 
-        public string GetFriendlyDefinitionName(MyDefinitionId definitionId)
+        public string GetFriendlyDefinitionName(MyDefinitionId definitionId) { return $"{GetFriendlyTypeName(definitionId)}/{definitionId.SubtypeName}"; }
+
+        public string GetFriendlyDefinitionDisplayName(MyDefinitionId definitionId)
         {
-            return $"{GetFriendlyTypeName(definitionId)}/{definitionId.SubtypeName}";
+            if (!Instance.Config.DisableShowItemName)
+            {
+                return GetFriendlyDefinitionName(definitionId);
+            }
+
+            return $"{MyDefinitionManager.Static.GetDefinition(definitionId)?.DisplayNameText ?? "UNKNOWN"} ({GetFriendlyDefinitionName(definitionId)})";
+
         }
 
-        private bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions)
-        {
-            return _resultToBlueprints.TryGetValue(definitionId, out definitions);
-        }
+        private bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions) { return _resultToBlueprints.TryGetValue(definitionId, out definitions); }
 
         public static bool TryGetPhysicalItemProperties(MyDefinitionId definitionId, out float volume, out float mass, out bool hasIntegralAmounts)
         {
@@ -368,6 +375,28 @@ namespace InventorySorter
             volume = 0;
             mass = 0;
             hasIntegralAmounts = false;
+            return false;
+        }
+
+        public bool CanAssemblerBuild(IMyAssembler assembler, KeyValuePair<MyDefinitionId, MyFixedPoint> item)
+        {
+            if (!Util.IsValid(assembler))
+            {
+                return false;
+            }
+
+            List<MyBlueprintDefinitionBase> blueprintDefinitions;
+            if (TryGetBlueprintDefinitionsByResultId(item.Key, out blueprintDefinitions))
+            {
+                foreach (var blueprintDefinition in blueprintDefinitions)
+                {
+                    if (assembler.CanUseBlueprint(blueprintDefinition))
+                    {
+                        return true;
+                    }
+                }
+            }
+
             return false;
         }
 
@@ -657,23 +686,54 @@ namespace InventorySorter
             return queueResults.Count > 0 ? InventoryInfo.BuildCustomData(queueResults, true) : string.Empty;
         }
 
-        public bool GenerateQueueFromCustomData(IMyAssembler assembler)
+        public void GenerateQueueFromItemList(IMyAssembler assembler, Dictionary<MyDefinitionId, MyFixedPoint> items)
+        {
+            foreach (var item in items)
+            {
+                List<MyBlueprintDefinitionBase> blueprintDefinitions;
+                if (!Instance.TryGetBlueprintDefinitionsByResultId(item.Key, out blueprintDefinitions))
+                {
+                    continue;
+                }
+
+                // Find usable blueprint
+                foreach (var blueprint in blueprintDefinitions)
+                {
+                    if (!assembler.CanUseBlueprint(blueprint))
+                    {
+                        continue;
+                    }
+
+                    if (item.Value <= MyFixedPoint.Zero)
+                    {
+                        continue;
+                    }
+
+                    assembler.AddQueueItem(blueprint, item.Value);
+                    break;
+                }
+            }
+        }
+
+        public Dictionary<MyDefinitionId, MyTuple<MyFixedPoint, bool>> GenerateQueueFromCustomData(IMyAssembler assembler)
         {
             var inputInventory = assembler?.OutputInventory as MyInventory;
             if (inputInventory == null)
             {
-                return false;
+                return new Dictionary<MyDefinitionId, MyTuple<MyFixedPoint, bool>>();
             }
 
             var inventoryInfo = new InventoryInfo(inputInventory, "Inventory");
 
             if (inventoryInfo.Requests == null)
             {
-                return false;
+                return new Dictionary<MyDefinitionId, MyTuple<MyFixedPoint, bool>>();
             }
 
+            var queued = new Dictionary<MyDefinitionId, MyTuple<MyFixedPoint, bool>>(inventoryInfo.Requests.Count);
             foreach (var request in inventoryInfo.Requests)
             {
+                queued[request.DefinitionId] = new MyTuple<MyFixedPoint, bool>(request.Amount, false);
                 List<MyBlueprintDefinitionBase> blueprintDefinitions;
                 if (!Instance.TryGetBlueprintDefinitionsByResultId(request.DefinitionId, out blueprintDefinitions))
                 {
@@ -694,11 +754,12 @@ namespace InventorySorter
                     }
 
                     assembler.AddQueueItem(blueprint, request.Amount);
+                    queued[request.DefinitionId] = new MyTuple<MyFixedPoint, bool>(request.Amount, true);
                     break;
                 }
             }
 
-            return true;
+            return queued;
         }
 
         public string GenerateCustomDataFromProjector(IMyProjector projector)
@@ -1676,6 +1737,7 @@ namespace InventorySorter
 
             var transferRequestCount = ExecuteMovementData(workData);
             DisplaySortResults(workData, transferRequestCount);
+            LastSortTick = MyAPIGateway.Session.GameplayFrameCounter;
             if (_autoSortingController != null)
             {
                 _autoSortTicksRemaining = Config.AutoSortFrequencySeconds * 60;
@@ -1822,14 +1884,31 @@ namespace InventorySorter
                             {
                                 continue;
                             }
+                            
+                            var def = MyDefinitionManager.Static.GetDefinition(availability.Key);
+                            if (def == null)
+                            {
+                                continue;
+                            }
 
-                            MyAPIGateway.Utilities.ShowMessage("Needed", $"{MyFixedPoint.Ceiling(-availability.Value)} {GetFriendlyDefinitionName(availability.Key)}");
+                            LastMissingItems.Clear();
+                            foreach (var item in workData.AvailableForDistribution)
+                            {
+                                if (item.Value >= MyFixedPoint.Zero)
+                                {
+                                    continue;
+                                }
+
+                                LastMissingItems[item.Key] = MyFixedPoint.Ceiling(-item.Value);
+                            }
+
+                            MyAPIGateway.Utilities.ShowMessage("Needed", $"{MyFixedPoint.Ceiling(-availability.Value)}x {def.DisplayNameText}");
                         }
                     }
 
                     break;
                 case ResultsDisplayType.Window:
-                    var groups = new Dictionary<string, Dictionary<string, MyFixedPoint>>();
+                    var groups = new Dictionary<string, Dictionary<MyDefinitionId, MyFixedPoint>>();
                     StringBuilder warningsBuilder = null;
                     if (validationFailedBlocks.Count > 0)
                     {
@@ -1934,7 +2013,7 @@ namespace InventorySorter
 
                         string friendlyName = GetFriendlyTypeName(availability.Key);
                         var group = groups.GetValueOrNew(friendlyName);
-                        group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
+                        group[availability.Key] = group.GetValueOrDefault(availability.Key) + availability.Value;
                         groups[friendlyName] = group;
                     }
 
@@ -1975,7 +2054,7 @@ namespace InventorySorter
                                 displayStringBuilder.AppendFormat("{0}:\n", group.Key);
                                 foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
                                 {
-                                    displayStringBuilder.AppendFormat("{0}: {1}\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                    displayStringBuilder.AppendFormat("{0}: {1}\n", GetFriendlyDefinitionDisplayName(subTypeValue.Key), MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
 
                                 displayStringBuilder.AppendLine();
@@ -2727,7 +2806,7 @@ namespace InventorySorter
                                 warningsBuilder = new StringBuilder();
                             }
 
-                            var itemName = GetFriendlyDefinitionName(item.Key);
+                            var itemName = GetFriendlyDefinitionDisplayName(item.Key);
                             if (missingCount > 0 && workData.ActiveDisassembling.Contains(item.Key))
                             {
                                 warningsBuilder.AppendFormat("{0} is currently being disassembled but is {1} units below quota", itemName, missingCount).AppendLine();
@@ -3003,10 +3082,7 @@ namespace InventorySorter
             return supportsConveyors;
         }
 
-        public bool IsWeapon(IMyCubeBlock block)
-        {
-            return block is IMyUserControllableGun || _weapons.Contains(block.BlockDefinition);
-        }
+        public bool IsWeapon(IMyCubeBlock block) { return block is IMyUserControllableGun || _weapons.Contains(block.BlockDefinition); }
 
         // Get the active ammo for a WC weapon
         private MyDefinitionId GetActiveAmmo(IMyTerminalBlock weapon, int weaponId = 0)

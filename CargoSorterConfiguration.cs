@@ -46,6 +46,7 @@ namespace InventorySorter
         public bool ShowMissingItems { get; set; }
         public bool CopyResultsToClipboard { get; set; }
         public int AutoSortFrequencySeconds { get; set; }
+        public bool DisableShowItemName { get; set; }
 
         public static CargoSorterConfiguration LoadSettings()
         {
@@ -241,6 +242,9 @@ namespace InventorySorter
             sb.AppendLine()
                 .AppendLine("Feature Settings:")
                 .AppendLine()
+                .Append("ShowItemName: ").Append(activeConfig.DisableShowItemName).Append(" (").Append(true).AppendLine(")")
+                .AppendLine("Show the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).")
+                .AppendLine()
                 .Append("GasGeneratorFillPercent: ").Append(activeConfig.GasGeneratorFillPercent * 100).Append(" (").Append(80).AppendLine(")")
                 .AppendLine("Fill gas generators to the configured volume percentage with ice (0 to disable).")
                 .AppendLine()
@@ -426,6 +430,19 @@ namespace InventorySorter
                 else
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"CargoSort: Failed to parse {value} as an integer or valid value. Value must be >= 5.");
+                    return;
+                }
+            }
+            else if (string.Equals(option, "ShowItemName", StringComparison.OrdinalIgnoreCase))
+            {
+                bool parsedValue;
+                if (bool.TryParse(value, out parsedValue))
+                {
+                    newConfig.DisableShowItemName = parsedValue;
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Failed to parse {value} as a boolean.");
                     return;
                 }
             }

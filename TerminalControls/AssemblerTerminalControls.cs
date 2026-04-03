@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
+using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Utils;
@@ -97,6 +99,15 @@ namespace InventorySorter.TerminalControls
                 Controls.Add(control);
             }
             {
+                var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_QueueMissingItems");
+                control.Title = MyStringId.GetOrCompute("Queue Missing");
+                control.Tooltip = MyStringId.GetOrCompute("Generates a queue based on items missing from the previous sort job.");
+                control.SupportsMultipleBlocks = false;
+                control.Enabled = HasMissingItems;
+                control.Action = GenerateFromLastMissing;
+                Controls.Add(control);
+            }
+            {
                 var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GeneratePrerequisiteCustomDataFromQueueButton");
                 control.Title = MyStringId.GetOrCompute("Make Prerequisite Data");
                 control.Tooltip = MyStringId.GetOrCompute("Makes sorter custom data that can be pasted into a Special/Limited container to fill it with the prerequisites for this assembler's queue");
@@ -114,7 +125,6 @@ namespace InventorySorter.TerminalControls
                 control.Action = GenerateResultCustomDataFromQueueAction;
                 Controls.Add(control);
             }
-
             {
                 var control = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyAssembler>("CargoSort_GenerateQueueFromCustomDataButton");
                 control.Title = MyStringId.GetOrCompute("Make Queue from Data");
@@ -138,13 +148,16 @@ namespace InventorySorter.TerminalControls
         private static bool HasQuotaCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
                                                                           block.CustomData.Contains("[Quota]") && !block.DisplayNameText.InsensitiveContains("[Secondary:");
 
+        private static bool HasMissingItems(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
+                                                                       CargoSorterSessionComponent.Instance.LastMissingItems.Count > 0;
+
 
         private static void GeneratePrerequisiteCustomDataFromQueueAction(IMyTerminalBlock block)
         {
             if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null)
             {
                 var data = CargoSorterSessionComponent.Instance.GeneratePrerequisiteCustomDataFromQueue(block as IMyAssembler);
-                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", $"{block.DisplayNameText}", " Queue Prerequisites", data, (clickResult) =>
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", block.DisplayNameText, " Queue Prerequisites", data, (clickResult) =>
                 {
                     if (!string.IsNullOrWhiteSpace(data) && clickResult == ResultEnum.OK)
                     {
@@ -159,9 +172,9 @@ namespace InventorySorter.TerminalControls
             if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null)
             {
                 var data = CargoSorterSessionComponent.Instance.GenerateResultCustomDataFromQueue(block as IMyAssembler);
-                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", $"{block.DisplayNameText}", " Queue Results", data, (clickResult) =>
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", block.DisplayNameText, " Queue Results", data, (clickResult) =>
                 {
-                    if (!string.IsNullOrWhiteSpace(data) && clickResult == ResultEnum.OK)
+                    if (clickResult == ResultEnum.OK)
                     {
                         MyClipboardHelper.SetClipboard(data);
                     }
@@ -173,9 +186,23 @@ namespace InventorySorter.TerminalControls
         {
             if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null)
             {
-                var queued = CargoSorterSessionComponent.Instance.GenerateQueueFromCustomData(block as IMyAssembler);
+                var assembler = (IMyAssembler)block;
+                var queued = CargoSorterSessionComponent.Instance.GenerateQueueFromCustomData(assembler);
+                var sb = new StringBuilder("Custom data queue results:\n\n");
 
-                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", string.Empty, $"{block.DisplayNameText}", queued ? "Queued Custom Data" : "Failed to queue custom data");
+                foreach (var item in queued)
+                {
+                    if (item.Value.Item2)
+                    {
+                        sb.Append(CargoSorterSessionComponent.Instance.GetFriendlyDefinitionDisplayName(item.Key)).Append(": ").Append(item.Value.Item1).AppendLine();
+                    }
+                    else
+                    {
+                        sb.Append("Cannot build ").Append(CargoSorterSessionComponent.Instance.GetFriendlyDefinitionDisplayName(item.Key)).AppendLine();
+                    }
+                }
+
+                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", string.Empty, block.DisplayNameText, sb.ToString());
             }
         }
 
@@ -202,6 +229,46 @@ namespace InventorySorter.TerminalControls
             if (Util.IsValid(block) && Util.IsValid(block.CubeGrid) && CargoSorterSessionComponent.Instance != null && block is IMyAssembler)
             {
                 CargoSorterSessionComponent.Instance.BeginQuotaJob((IMyAssembler)block, ResultsDisplayType.Window);
+            }
+        }
+
+        private static void GenerateFromLastMissing(IMyTerminalBlock block)
+        {
+            if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null && CargoSorterSessionComponent.Instance.LastMissingItems.Count > 0)
+            {
+                // Only show the window if it's been greater than 10 seconds since last sort.
+                if (CargoSorterSessionComponent.Instance.LastSortTick < MyAPIGateway.Session.GameplayFrameCounter - 600)
+                {
+                    var sb = new StringBuilder("The following items were missing and will be queued. Close to cancel.\n\n");
+
+                    var assembler = (IMyAssembler)block;
+                    foreach (var item in CargoSorterSessionComponent.Instance.LastMissingItems.OrderBy(g => (float)g.Value))
+                    {
+                        if (CargoSorterSessionComponent.Instance.CanAssemblerBuild(assembler, item))
+                        {
+                            sb.Append(CargoSorterSessionComponent.Instance.GetFriendlyDefinitionDisplayName(item.Key)).Append(": ").Append(item.Value).AppendLine();
+                        }
+                        else
+                        {
+                            sb.Append("Cannot build ").Append(CargoSorterSessionComponent.Instance.GetFriendlyDefinitionDisplayName(item.Key)).AppendLine();
+                        }
+                    }
+
+                    var missingItems = CargoSorterSessionComponent.Instance.LastMissingItems;
+                    MyAPIGateway.Utilities.ShowMissionScreen("Queue Missing Items", block.DisplayNameText, " Missing Items", sb.ToString(), (clickResult) =>
+                    {
+                        if (clickResult == ResultEnum.OK)
+                        {
+                            CargoSorterSessionComponent.Instance.GenerateQueueFromItemList(block as IMyAssembler, missingItems);
+                            CargoSorterSessionComponent.Instance.LastMissingItems.Clear();
+                        }
+                    }, "Queue Items");
+                }
+                else
+                {
+                    CargoSorterSessionComponent.Instance.GenerateQueueFromItemList((IMyAssembler)block, CargoSorterSessionComponent.Instance.LastMissingItems);
+                    CargoSorterSessionComponent.Instance.LastMissingItems.Clear();
+                }
             }
         }
     }
