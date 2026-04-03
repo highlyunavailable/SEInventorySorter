@@ -349,12 +349,13 @@ namespace InventorySorter
 
         public string GetFriendlyDefinitionDisplayName(MyDefinitionId definitionId)
         {
-            if (!Instance.Config.DisableShowItemName)
+            var def = MyDefinitionManager.Static.GetDefinition(definitionId);
+            if (def == null || Instance.Config.DisableShowItemName)
             {
                 return GetFriendlyDefinitionName(definitionId);
             }
 
-            return $"{MyDefinitionManager.Static.GetDefinition(definitionId)?.DisplayNameText ?? "UNKNOWN"} ({GetFriendlyDefinitionName(definitionId)})";
+            return $"{def.DisplayNameText} ({GetFriendlyDefinitionName(definitionId)})";
 
         }
 
@@ -2088,7 +2089,7 @@ namespace InventorySorter
                             {
                                 foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
                                 {
-                                    clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                    clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key.SubtypeId, MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
                             }
 
@@ -2719,7 +2720,7 @@ namespace InventorySorter
 
                     break;
                 case ResultsDisplayType.Window:
-                    var groups = new Dictionary<string, Dictionary<string, MyFixedPoint>>();
+                    var groups = new Dictionary<string, Dictionary<MyDefinitionId, MyFixedPoint>>();
                     StringBuilder warningsBuilder = null;
 
                     if (workData.QuotaInfo.RequestStatus != RequestValidationStatus.Valid)
@@ -2836,7 +2837,7 @@ namespace InventorySorter
 
                         string friendlyName = GetFriendlyTypeName(availability.Key);
                         var group = groups.GetValueOrNew(friendlyName);
-                        group[availability.Key.SubtypeName] = group.GetValueOrDefault(availability.Key.SubtypeName) + availability.Value;
+                        group[availability.Key] = group.GetValueOrDefault(availability.Key) + availability.Value;
                         groups[friendlyName] = group;
                     }
 
@@ -2867,11 +2868,11 @@ namespace InventorySorter
                             {
                                 if (subTypeValue.Value > 0)
                                 {
-                                    displayStringBuilder.AppendFormat("{0}: {1} missing\n", subTypeValue.Key, MyFixedPoint.Ceiling(subTypeValue.Value));
+                                    displayStringBuilder.AppendFormat("{0}: {1} missing\n", GetFriendlyDefinitionDisplayName(subTypeValue.Key), MyFixedPoint.Ceiling(subTypeValue.Value));
                                 }
                                 else
                                 {
-                                    displayStringBuilder.AppendFormat("{0}: {1} excess\n", subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                    displayStringBuilder.AppendFormat("{0}: {1} excess\n", GetFriendlyDefinitionDisplayName(subTypeValue.Key), MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
                             }
 
@@ -2905,7 +2906,7 @@ namespace InventorySorter
                             {
                                 foreach (var subTypeValue in group.Value.OrderBy(g => (float)g.Value))
                                 {
-                                    clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key, MyFixedPoint.Ceiling(-subTypeValue.Value));
+                                    clipboardStringBuilder.AppendFormat("{0},{1},{2}\n", group.Key, subTypeValue.Key.SubtypeId, MyFixedPoint.Ceiling(-subTypeValue.Value));
                                 }
                             }
 

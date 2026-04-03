@@ -265,9 +265,9 @@ namespace InventorySorter
                 .AppendLine()
                 .Append("AutoSortFrequencySeconds: ").Append(activeConfig.AutoSortFrequencySeconds).Append(" (").Append(10).AppendLine(")")
                 .AppendLine("WIP: Grid-local auto sorting frequency in seconds, minimum 5.")
+                .AppendLine()
                 .Append("DisableShowItemName: ").Append(activeConfig.DisableShowItemName).Append(" (").Append(false).AppendLine(")")
-                .AppendLine("Disable showing the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).")
-                .AppendLine();
+                .AppendLine("Disable showing the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).");
             MyAPIGateway.Utilities.ShowMissionScreen("Inventory Sorter", string.Empty, "Settings",
                 sb.ToString());
         }
