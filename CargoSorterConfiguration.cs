@@ -242,8 +242,8 @@ namespace InventorySorter
             sb.AppendLine()
                 .AppendLine("Feature Settings:")
                 .AppendLine()
-                .Append("ShowItemName: ").Append(activeConfig.DisableShowItemName).Append(" (").Append(true).AppendLine(")")
-                .AppendLine("Show the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).")
+                .Append("DisableShowItemName: ").Append(activeConfig.DisableShowItemName).Append(" (").Append(true).AppendLine(")")
+                .AppendLine("Disable showing the display name of the item (ex. Steel Plate) alongside the definition ID (Component/SteelPlate).")
                 .AppendLine()
                 .Append("GasGeneratorFillPercent: ").Append(activeConfig.GasGeneratorFillPercent * 100).Append(" (").Append(80).AppendLine(")")
                 .AppendLine("Fill gas generators to the configured volume percentage with ice (0 to disable).")
@@ -433,7 +433,7 @@ namespace InventorySorter
                     return;
                 }
             }
-            else if (string.Equals(option, "ShowItemName", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(option, "DisableShowItemName", StringComparison.OrdinalIgnoreCase))
             {
                 bool parsedValue;
                 if (bool.TryParse(value, out parsedValue))
