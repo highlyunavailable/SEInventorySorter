@@ -356,7 +356,6 @@ namespace InventorySorter
             }
 
             return $"{def.DisplayNameText} ({GetFriendlyDefinitionName(definitionId)})";
-
         }
 
         private bool TryGetBlueprintDefinitionsByResultId(MyDefinitionId definitionId, out List<MyBlueprintDefinitionBase> definitions) { return _resultToBlueprints.TryGetValue(definitionId, out definitions); }
@@ -938,22 +937,14 @@ namespace InventorySorter
                             continue;
                         }
 
-                        var wantedAmmo = default(MyDefinitionId);
-                        if (inventory.Constraint?.ConstrainedIds != null)
+                        var wantedAmmo = GetActiveAmmo(inventoryInfo.Block);
+                        if (wantedAmmo == default(MyDefinitionId) && inventory.Constraint?.ConstrainedIds != null && inventory.Constraint.ConstrainedIds.Count > 0)
                         {
-                            // ReSharper disable once PossibleNullReferenceException
-                            if (inventory.Constraint.ConstrainedIds.Count == 1)
+                            // Take the first.
+                            foreach (var id in inventory.Constraint.ConstrainedIds)
                             {
-                                // Take the first.
-                                foreach (var id in inventory.Constraint.ConstrainedIds)
-                                {
-                                    wantedAmmo = id;
-                                    break;
-                                }
-                            }
-                            else
-                            {
-                                wantedAmmo = GetActiveAmmo(inventoryInfo.Block);
+                                wantedAmmo = id;
+                                break;
                             }
                         }
 
@@ -1885,7 +1876,7 @@ namespace InventorySorter
                             {
                                 continue;
                             }
-                            
+
                             var def = MyDefinitionManager.Static.GetDefinition(availability.Key);
                             if (def == null)
                             {
