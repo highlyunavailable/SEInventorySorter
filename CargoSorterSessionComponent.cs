@@ -932,7 +932,7 @@ namespace InventorySorter
                             continue;
                         }
 
-                        if (!inventoryInfo.Block.IsFunctional)
+                        if (!inventoryInfo.Block.IsFunctional || !HasConveyorSupport(inventoryInfo.Block))
                         {
                             continue;
                         }
@@ -940,9 +940,10 @@ namespace InventorySorter
                         var wantedAmmo = GetActiveAmmo(inventoryInfo.Block);
                         if (wantedAmmo == default(MyDefinitionId) && inventory.Constraint?.ConstrainedIds != null && inventory.Constraint.ConstrainedIds.Count > 0)
                         {
-                            // Take the first.
+                            // Take the first that's valid (excludes 5.56 old mags)
                             foreach (var id in inventory.Constraint.ConstrainedIds)
                             {
+                                if (MyDefinitionManager.Static.GetAmmoMagazineDefinition(id)?.CanSpawnFromScreen != true) continue;
                                 wantedAmmo = id;
                                 break;
                             }
