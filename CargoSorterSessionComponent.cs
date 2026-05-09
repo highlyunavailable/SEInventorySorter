@@ -1405,8 +1405,8 @@ namespace InventorySorter
                     if (inventoryInfo.Block is IMyGasGenerator && Config.GasGeneratorFillPercent > 0)
                     {
                         canFit = MyFixedPoint.Min(canFit, inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
-                            Math.Min((float)inventoryInfo.VirtualVolume, (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent)),
-                            Math.Min((float)inventoryInfo.VirtualMass, (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent))));
+                            MyFixedPoint.Min(inventoryInfo.VirtualVolume, inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent)),
+                            MyFixedPoint.Min(inventoryInfo.VirtualMass, inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent))));
                     }
 
                     return canFit - bottleCount + lowBottleCount;
@@ -1436,8 +1436,8 @@ namespace InventorySorter
                 if (percentFull < Config.GasGeneratorFillPercent / 2f || percentFull > 1f - ((1f - Config.GasGeneratorFillPercent) / 2f))
                 {
                     return inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
-                        (float)inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
-                        (float)inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)
+                        inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent),
+                        inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent)
                     ) - inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
                 }
 

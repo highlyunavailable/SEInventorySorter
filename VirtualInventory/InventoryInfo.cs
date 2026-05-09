@@ -226,7 +226,7 @@ namespace InventorySorter.VirtualInventory
             {
                 priorityStartIndex += 2;
                 var priorityLen = 0;
-                bool foundTerminator = false;
+                var foundTerminator = false;
                 while (priorityStartIndex + priorityLen < Block.DisplayNameText.Length && priorityLen < 4)
                 {
                     if (Block.DisplayNameText[priorityStartIndex + priorityLen] == ']')
@@ -393,7 +393,7 @@ namespace InventorySorter.VirtualInventory
                     }
                     else if (request.Flag == RequestFlags.Max)
                     {
-                        amount = ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts, (float)sumVolume, (float)sumMass);
+                        amount = ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts, sumVolume, sumMass);
                         if (amount == MyFixedPoint.Zero)
                         {
                             return false;
@@ -442,7 +442,7 @@ namespace InventorySorter.VirtualInventory
 
         private MyIniParseResult ParseCustomDataRequests(string sectionName, bool skipCreate = false)
         {
-            MyIniParseResult quotaParseResult = new MyIniParseResult();
+            var quotaParseResult = new MyIniParseResult();
             if (!Util.IsValid(Block))
             {
                 // MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} isn't a terminal block");
@@ -590,20 +590,17 @@ namespace InventorySorter.VirtualInventory
             return quotaParseResult;
         }
 
-        private bool IsCustomDataEmpty(string customData)
-        {
-            return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase);
-        }
+        private bool IsCustomDataEmpty(string customData) { return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase); }
 
         private string BuildCurrentContentsSpecialData(IMyCubeBlock block, string sectionName, MyIni ini)
         {
             var items = new Dictionary<MyDefinitionId, MyFixedPoint>();
-            for (int i = 0; i < block.InventoryCount; i++)
+            for (var i = 0; i < block.InventoryCount; i++)
             {
                 var inv = (MyInventory)block.GetInventory(i);
                 foreach (var item in inv.GetItems())
                 {
-                    MyDefinitionId id = item.Content.GetId();
+                    var id = item.Content.GetId();
                     MyFixedPoint amount;
                     items.TryGetValue(id, out amount);
                     amount += item.Amount;
@@ -628,12 +625,12 @@ namespace InventorySorter.VirtualInventory
 
             if (hasIntegralAmounts)
             {
-                amount = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)amount * 1000.0) / 1000.0));
+                amount = MyFixedPoint.Floor(amount);
             }
 
             volumeToBeMoved = amount * volume;
             massToBeMoved = amount * mass;
-            return !(volumeToBeMoved + VirtualVolume > MaxVolume) && !(massToBeMoved + VirtualMass > MaxMass);
+            return (volumeToBeMoved + VirtualVolume <= MaxVolume || (MaxVolume - VirtualVolume - volumeToBeMoved).Abs().RawValue < 100) && (massToBeMoved + VirtualMass <= MaxMass || (MaxMass - VirtualMass - massToBeMoved).Abs().RawValue < 100);
         }
 
         internal MyFixedPoint ComputeAmountThatFits(MyDefinitionId contentId, bool forceIntegralAmount = false)
@@ -646,18 +643,18 @@ namespace InventorySorter.VirtualInventory
                 return MyFixedPoint.Zero;
             }
 
-            MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)VirtualVolume) / (double)volume), 0);
-            MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)VirtualMass) / (double)mass), 0);
-            MyFixedPoint amount = MyFixedPoint.Min(a, b);
+            var a = MyFixedPoint.Max((MyFixedPoint)((double)(MaxVolume - VirtualVolume) / (double)volume), 0);
+            var b = MyFixedPoint.Max((MyFixedPoint)((double)(MaxMass - VirtualMass) / (double)mass), 0);
+            var amount = MyFixedPoint.Min(a, b);
             if (hasIntegralAmounts || forceIntegralAmount)
             {
-                amount = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)amount * 1000.0) / 1000.0));
+                amount = MyFixedPoint.Floor(amount);
             }
 
             return amount;
         }
 
-        internal MyFixedPoint ComputeAmountThatCouldFit(MyDefinitionId contentId, bool forceIntegralAmount = false, float volumeReserved = 0f, float massReserved = 0f)
+        internal MyFixedPoint ComputeAmountThatCouldFit(MyDefinitionId contentId, bool forceIntegralAmount = false, MyFixedPoint volumeReserved = default(MyFixedPoint), MyFixedPoint massReserved = default(MyFixedPoint))
         {
             float mass;
             float volume;
@@ -670,17 +667,17 @@ namespace InventorySorter.VirtualInventory
             return ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts, volumeReserved, massReserved);
         }
 
-        private MyFixedPoint ComputeAmountThatCouldFit(float volume, float mass, bool hasIntegralAmounts, float volumeReserved = 0f, float massReserved = 0f)
+        private MyFixedPoint ComputeAmountThatCouldFit(float volume, float mass, bool hasIntegralAmounts, MyFixedPoint volumeReserved = default(MyFixedPoint), MyFixedPoint massReserved = default(MyFixedPoint))
         {
-            MyFixedPoint a = MyFixedPoint.Max((MyFixedPoint)(((double)MaxVolume - (double)volumeReserved) / (double)volume), 0);
-            MyFixedPoint b = MyFixedPoint.Max((MyFixedPoint)(((double)MaxMass - (double)massReserved) / (double)mass), 0);
-            MyFixedPoint myFixedPoint = MyFixedPoint.Min(a, b);
+            var a = MyFixedPoint.Max((MyFixedPoint)((double)(MaxVolume - volumeReserved) / (double)volume), 0);
+            var b = MyFixedPoint.Max((MyFixedPoint)((double)(MaxMass - massReserved) / (double)mass), 0);
+            var amount = MyFixedPoint.Min(a, b);
             if (hasIntegralAmounts)
             {
-                myFixedPoint = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)myFixedPoint * 1000.0) / 1000.0));
+                amount = MyFixedPoint.Floor(amount);
             }
 
-            return myFixedPoint;
+            return amount;
         }
 
         internal static string BuildCustomData(Dictionary<MyDefinitionId, MyFixedPoint> items, bool ceiling, string sectionName = null, MyIni ini = null)
