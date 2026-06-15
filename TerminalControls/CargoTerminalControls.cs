@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using Sandbox.Game;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
-using VRage;
 using VRage.Game.Entity;
 using VRage.Utils;
-using VRageMath;
 
 namespace InventorySorter.TerminalControls
 {

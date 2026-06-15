@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Common.ObjectBuilders.Definitions;
-using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
 using SpaceEngineers.Game.ModAPI;
@@ -10,13 +9,11 @@ using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Utils;
 
 namespace InventorySorter.VirtualInventory
 {
     public class InventoryInfo
     {
-        private static readonly char[] SectionEndCharacters = { '\r', '\n', ']' };
         private static readonly MyIni IniParser = new MyIni();
         public byte Priority;
         public readonly TypeRequests TypeRequests;
@@ -448,7 +445,7 @@ namespace InventorySorter.VirtualInventory
             }
 
             IniParser.Clear();
-            if (!skipCreate && IsCustomDataEmpty(Block.CustomData))
+            if (!skipCreate && Util.IsCustomDataEmpty(Block.CustomData))
             {
                 Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, IniParser);
             }
@@ -588,8 +585,6 @@ namespace InventorySorter.VirtualInventory
             return quotaParseResult;
         }
 
-        private bool IsCustomDataEmpty(string customData) { return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase); }
-
         private string BuildCurrentContentsSpecialData(IMyCubeBlock block, string sectionName, MyIni ini)
         {
             var items = new Dictionary<MyDefinitionId, MyFixedPoint>();
@@ -599,10 +594,7 @@ namespace InventorySorter.VirtualInventory
                 foreach (var item in inv.GetItems())
                 {
                     var id = item.Content.GetId();
-                    MyFixedPoint amount;
-                    items.TryGetValue(id, out amount);
-                    amount += item.Amount;
-                    items[id] = amount;
+                    items[id] = items.GetValueOrDefault(id, MyFixedPoint.Zero) + item.Amount;
                 }
             }
 

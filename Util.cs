@@ -27,6 +27,8 @@ namespace InventorySorter
             return obj != null && !obj.MarkedForClose && !obj.Closed;
         }
 
+        public static bool IsCustomDataEmpty(string customData) => string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase);
+
         //
         // Summary:
         //     Removes whitespace from the end. Copied because the real one is prohibited
@@ -293,10 +295,10 @@ namespace InventorySorter
         {
             return inString.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
         }
-
-        public static MyFixedPoint Abs(this MyFixedPoint value)
+       public static MyFixedPoint Abs(this MyFixedPoint value)
         {
             return value < MyFixedPoint.Zero ? -value : value;
         }
+
     }
 }

@@ -4,7 +4,6 @@ using Sandbox.ModAPI;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Utils;
 
 namespace InventorySorter.VirtualInventory
 {
@@ -49,7 +48,7 @@ namespace InventorySorter.VirtualInventory
         {
             var result = new AssemblerQuotaInfo(block);
 
-            if (IsCustomDataEmpty(block.CustomData) || !IniParser.ContainsSection(OptionsSectionName))
+            if (Util.IsCustomDataEmpty(block.CustomData) || !IniParser.ContainsSection(OptionsSectionName))
             {
                 return result;
             }
@@ -76,7 +75,7 @@ namespace InventorySorter.VirtualInventory
 
         public static void ReadQuota(IMyAssembler block, ProductionQuotaInfo info)
         {
-            if (IsCustomDataEmpty(block.CustomData) || !IniParser.ContainsSection(QuotaSectionName))
+            if (Util.IsCustomDataEmpty(block.CustomData) || !IniParser.ContainsSection(QuotaSectionName))
             {
                 return;
             }
@@ -148,8 +147,6 @@ namespace InventorySorter.VirtualInventory
                 }
             }
         }
-
-        private static bool IsCustomDataEmpty(string customData) { return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase); }
     }
 
     public struct AssemblerQuotaItem
