@@ -96,7 +96,10 @@ namespace InventorySorter
                     }
                     else
                     {
-                        bpList = new List<MyBlueprintDefinitionBase>() { definition };
+                        bpList = new List<MyBlueprintDefinitionBase>
+                        {
+                            definition
+                        };
                         _resultToBlueprints.Add(result.Id, bpList);
                     }
                 }
@@ -814,8 +817,10 @@ namespace InventorySorter
                 else
                 {
                     var tree = new GridConnectorTree(workData.RootGrid);
-                    var nodes = tree.GatherRecursive(c => c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
-                                                          c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false);
+                    var nodes = tree.GatherRecursive(c =>
+                        c.CustomName?.InsensitiveContains("[nosort]") == false &&
+                        c.OtherConnector?.CustomName?.InsensitiveContains("[nosort]") == false &&
+                        c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false);
 
                     foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                     {
@@ -849,7 +854,7 @@ namespace InventorySorter
             {
                 if (!Util.IsValid(block) || block.InventoryCount == 0 || !block.HasLocalPlayerAccess() || IsIgnored(block))
                 {
-                    // MyLog.Default.WriteLineAndConsole($"Ignoring block: {block.DisplayNameText}");
+                    // MyLog.Default.WriteLineAndConsole($"Ignoring block: {Block.CustomName}");
                     continue;
                 }
 
@@ -864,11 +869,11 @@ namespace InventorySorter
                     var inventoryInfo = new InventoryInfo(inventory, workData.SectionName);
                     if (inventoryInfo.TypeRequests == TypeRequests.Nothing && (inventoryInfo.VirtualInventory.Count == 0 || !inventoryInfo.SupportsConveyors))
                     {
-                        // MyLog.Default.WriteLineAndConsole($"Block wants nothing and has nothing, skipping: {block.DisplayNameText}");
+                        // MyLog.Default.WriteLineAndConsole($"Block wants nothing and has nothing, skipping: {Block.CustomName}");
                         continue;
                     }
 
-                    // MyLog.Default.WriteLineAndConsole($"Adding inventory info for {block.DisplayNameText}");
+                    // MyLog.Default.WriteLineAndConsole($"Adding inventory info for {Block.CustomName}");
                     outInventories.Add(inventoryInfo);
                     foreach (var definitionId in inventoryInfo.VirtualInventory.Keys)
                     {
@@ -943,7 +948,8 @@ namespace InventorySorter
                             // Take the first that's valid (excludes 5.56 old mags)
                             foreach (var id in inventory.Constraint.ConstrainedIds)
                             {
-                                if (MyDefinitionManager.Static.GetAmmoMagazineDefinition(id)?.CanSpawnFromScreen != true) continue;
+                                if (MyDefinitionManager.Static.GetAmmoMagazineDefinition(id)?.CanSpawnFromScreen != true)
+                                    continue;
                                 wantedAmmo = id;
                                 break;
                             }
@@ -972,12 +978,12 @@ namespace InventorySorter
             // MyLog.Default.WriteLineAndConsole($"Building inventory buckets");
             foreach (var inventory in inventories)
             {
-                // MyLog.Default.WriteLineAndConsole($"Building buckets for inventory on {inventory.Block.DisplayNameText}");
+                // MyLog.Default.WriteLineAndConsole($"Building buckets for inventory on {inventory.Block.CustomName}");
                 foreach (var definitionId in workData.TypeBuckets.Keys)
                 {
                     if (inventory.Constraint != null && !inventory.Constraint.Check(definitionId))
                     {
-                        // MyLog.Default.WriteLineAndConsole($"Failed constraint check for {definitionId} on {inventory.Block.DisplayNameText}, skipping");
+                        // MyLog.Default.WriteLineAndConsole($"Failed constraint check for {definitionId} on {inventory.Block.CustomName}, skipping");
                         continue;
                     }
 
@@ -1009,7 +1015,7 @@ namespace InventorySorter
                         buckets.Add(bucket);
                     }
 
-                    //MyLog.Default.WriteLineAndConsole($"Added inventory on {inventory.Block.DisplayNameText} to {definitionId} bucket {bucket}");
+                    //MyLog.Default.WriteLineAndConsole($"Added inventory on {inventory.Block.CustomName} to {definitionId} bucket {bucket}");
                     bucket.Inventories.Add(inventory);
                 }
             }
@@ -1069,7 +1075,7 @@ namespace InventorySorter
                             }
                         }
 
-                        comparison = string.CompareOrdinal(x.Block.DisplayNameText, y.Block.DisplayNameText);
+                        comparison = string.CompareOrdinal(x.Block.CustomName, y.Block.CustomName);
                         return comparison == 0 ? x.Block.EntityId.CompareTo(y.Block.EntityId) : comparison;
                     });
                 }
@@ -1084,7 +1090,7 @@ namespace InventorySorter
             //         MyLog.Default.WriteLineAndConsole($"CargoSort:   {bucket}");
             //         foreach (var i in bucket.Inventories)
             //         {
-            //             MyLog.Default.WriteLineAndConsole($"CargoSort:     {i.Block.DisplayNameText}");
+            //             MyLog.Default.WriteLineAndConsole($"CargoSort:     {i.Block.CustomName}");
             //         }
             //     }
             // }
@@ -1094,7 +1100,7 @@ namespace InventorySorter
         {
             foreach (var item in Instance.Config.LockedContainerKeywords)
             {
-                if (block.DisplayNameText.InsensitiveContains(item))
+                if (block.CustomName.InsensitiveContains(item))
                 {
                     return true;
                 }
@@ -1739,7 +1745,7 @@ namespace InventorySorter
 
         private void DisplaySortResults(CargoSorterWorkData workData, int transferRequestCount)
         {
-            var validationFailedBlocks = new Dictionary<IMyCubeBlock, ValueTuple<RequestValidationStatus, MyIniParseResult>>();
+            var validationFailedBlocks = new Dictionary<IMyTerminalBlock, ValueTuple<RequestValidationStatus, MyIniParseResult>>();
             foreach (var typeBucket in workData.TypeBuckets)
             {
                 foreach (var inventoryBucket in typeBucket.Value)
@@ -1791,12 +1797,12 @@ namespace InventorySorter
                     {
                         if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.TooMuchVolume))
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Warning: Requested items on '{failedBlock.Key.DisplayNameText}' will not fit!");
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Warning: Requested items on '{failedBlock.Key.CustomName}' will not fit!");
                         }
 
                         if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{failedBlock.Key.DisplayNameText}': {failedBlock.Value.Item2.Error}");
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on container '{failedBlock.Key.CustomName}': {failedBlock.Value.Item2.Error}");
                         }
                         else if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidItem) || failedBlock.Value.Item1.HasFlag(RequestValidationStatus.InvalidCount))
                         {
@@ -1825,7 +1831,7 @@ namespace InventorySorter
                                 MyDefinitionId definitionId;
                                 if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                                 {
-                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
+                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on container '{terminalBlock.CustomName}'");
                                     continue;
                                 }
 
@@ -1843,7 +1849,7 @@ namespace InventorySorter
                                         continue;
                                     }
 
-                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"'{definitionId}' in Custom Data on container '{terminalBlock.DisplayNameText}' is not allowed in inventory {i} on the block");
+                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"'{definitionId}' in Custom Data on container '{terminalBlock.CustomName}' is not allowed in inventory {i} on the block");
                                     failedConstraints = true;
                                     break;
                                 }
@@ -1863,7 +1869,7 @@ namespace InventorySorter
                                 int itemCount;
                                 if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                 {
-                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{terminalBlock.DisplayNameText}'");
+                                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on container '{terminalBlock.CustomName}'");
                                 }
                             }
                         }
@@ -1909,7 +1915,7 @@ namespace InventorySorter
 
                         foreach (var failedBlock in validationFailedBlocks)
                         {
-                            warningsBuilder.AppendFormat("{0}:\n", failedBlock.Key.DisplayNameText);
+                            warningsBuilder.AppendFormat("{0}:\n", failedBlock.Key.CustomName);
 
                             if (failedBlock.Value.Item1.HasFlag(RequestValidationStatus.TooMuchVolume))
                             {
@@ -2157,11 +2163,9 @@ namespace InventorySorter
             {
                 var workData = (QuotaManagerWorkData)data;
                 var tree = new GridConnectorTree(workData.Block.CubeGrid);
-                var nodes = tree.GatherRecursive(c =>
-                {
-                    return c.DisplayNameText?.InsensitiveContains("[nosort]") == false &&
-                           c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false;
-                });
+                var nodes = tree.GatherRecursive(c => c.CustomName?.InsensitiveContains("[nosort]") == false &&
+                                                      c.OtherConnector?.CustomName?.InsensitiveContains("[nosort]") == false &&
+                                                      c.OtherConnector?.CubeGrid?.CustomName?.InsensitiveContains("[nosort]") == false);
 
                 foreach (var cubeGrid in GridConnectorTree.GatherGrids(nodes))
                 {
@@ -2235,7 +2239,7 @@ namespace InventorySorter
                     {
                         if (assembler.AllowDisassembly)
                         {
-                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found disassembler {assembler.Block.DisplayNameText}");
+                            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found disassembler {assembler.Block.CustomName}");
                             List<MyBlueprintDefinitionBase> blueprintDefinitions;
                             if (Instance.TryGetBlueprintDefinitionsByResultId(item.Key, out blueprintDefinitions))
                             {
@@ -2249,7 +2253,7 @@ namespace InventorySorter
                                         workData.MarkedForDisassembly.Add(assembler.Block);
                                         workData.ItemAvailableAssemblers[item.Key] = availableAssemblers;
                                         itemSatisfied = true;
-                                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.DisplayNameText} for disassembly");
+                                        //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Marking {assembler.Block.CustomName} for disassembly");
                                         break;
                                     }
                                 }
@@ -2352,13 +2356,24 @@ namespace InventorySorter
                     continue;
                 }
 
-                bool gatherInventoryContents = false;
+                var gatherInventoryContents = false;
                 var assembler = block as IMyAssembler;
                 if (assembler != null)
                 {
-                    if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ? workData.Block == block : assembler.DisplayNameText.InsensitiveContains(workData.QuotaInfo.GroupName))
+                    if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ? workData.Block == block : assembler.CustomName.InsensitiveContains(workData.QuotaInfo.GroupName))
                     {
-                        workData.GroupAssemblers.Add(ProductionQuotaInfo.ParseQuotaOptions(assembler));
+                        var parseResult = ProductionQuotaInfo.Parse(assembler);
+                        
+                        if (parseResult.Success)
+                        {
+                            workData.GroupAssemblers.Add(ProductionQuotaInfo.ReadOptions(assembler));
+                            if (assembler == workData.Block) // Read primary assembler quota data
+                            {
+                                workData.QuotaInfo.ConfigParseResult = parseResult;
+                                ProductionQuotaInfo.ReadQuota(assembler, workData.QuotaInfo);
+                            }
+                        }
+
                         if (!assembler.IsQueueEmpty)
                         {
                             foreach (var queuedItem in assembler.GetQueue())
@@ -2394,7 +2409,7 @@ namespace InventorySorter
                 }
                 else
                 {
-                    gatherInventoryContents = block.DisplayNameText.InsensitiveContains(Instance.Config.QuotaContainerKeyword);
+                    gatherInventoryContents = block.CustomName.InsensitiveContains(Instance.Config.QuotaContainerKeyword);
                 }
 
                 if (!gatherInventoryContents)
@@ -2419,6 +2434,11 @@ namespace InventorySorter
                 }
             }
 
+            foreach (var item in workData.QuotaInfo.QuotaItems)
+            {
+                workData.MissingItems[item.ItemId] = item.Amount;
+            }
+
             //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: Found {workData.GroupAssemblers.Count} assemblers for {workData.QuotaInfo.GroupName}");
         }
 
@@ -2433,7 +2453,7 @@ namespace InventorySorter
 
         private void ExecuteQueueChanges(QuotaManagerWorkData workData)
         {
-            if (workData.QuotaInfo.QuotaItems == null)
+            if (workData.QuotaInfo.QuotaItems.Count == 0)
             {
                 return;
             }
@@ -2489,7 +2509,7 @@ namespace InventorySorter
                         // This assembler is for disassembly, and therefore cannot be used to assemble.
                         if (!disassembling)
                         {
-                            //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.DisplayNameText} is disassembling, skipping for assembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
+                            //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.CustomName} is disassembling, skipping for assembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
                             availableAssemblers.RemoveAtFast(ai);
                             continue;
                         }
@@ -2499,7 +2519,7 @@ namespace InventorySorter
                         // This assembler is for assembly, and therefore cannot be used to disassemble.
                         if (disassembling)
                         {
-                            //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.DisplayNameText} is assembling, skipping for disassembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
+                            //MyLog.Default.WriteLineAndConsole($"Assembler {assembler.Block.CustomName} is assembling, skipping for disassembly item {quotaItem.ItemId} which needs {remainingToQueue} items");
                             availableAssemblers.RemoveAtFast(ai);
                             continue;
                         }
@@ -2669,7 +2689,7 @@ namespace InventorySorter
                     {
                         if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
-                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on assembler '{workData.Block.DisplayNameText}': {workData.QuotaInfo.ConfigParseResult.Error}");
+                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid Custom Data on assembler '{workData.Block.CustomName}': {workData.QuotaInfo.ConfigParseResult.Error}");
                         }
 
                         else if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidItem) || workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCount))
@@ -2680,7 +2700,7 @@ namespace InventorySorter
                             {
                                 if (ini.ContainsSection(ProductionQuotaInfo.QuotaSectionName))
                                 {
-                                    List<MyIniKey> iniKeys = new List<MyIniKey>();
+                                    var iniKeys = new List<MyIniKey>();
                                     ini.GetKeys(ProductionQuotaInfo.QuotaSectionName, iniKeys);
 
                                     foreach (var iniKey in iniKeys)
@@ -2693,7 +2713,7 @@ namespace InventorySorter
                                         MyDefinitionId definitionId;
                                         if (!TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                                         {
-                                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.DisplayNameText}'");
+                                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Unknown item '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.CustomName}'");
                                             continue;
                                         }
 
@@ -2702,7 +2722,7 @@ namespace InventorySorter
                                         int itemCount;
                                         if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                                         {
-                                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.DisplayNameText}'");
+                                            MyAPIGateway.Utilities.ShowMessage("Sorter", $"Invalid count '{valueString}' for type '{iniKey.Name}' in Custom Data on assembler '{terminalBlock.CustomName}'");
                                         }
                                     }
                                 }
@@ -2719,7 +2739,7 @@ namespace InventorySorter
                     {
                         warningsBuilder = new StringBuilder();
 
-                        warningsBuilder.AppendFormat("{0}:\n", workData.Block.DisplayNameText);
+                        warningsBuilder.AppendFormat("{0}:\n", workData.Block.CustomName);
 
                         if (workData.QuotaInfo.RequestStatus.HasFlag(RequestValidationStatus.InvalidCustomData))
                         {
@@ -2756,16 +2776,9 @@ namespace InventorySorter
                                         var rangeIndex = valueString.IndexOf('-');
                                         if (rangeIndex != -1)
                                         {
-                                            var values = valueString.Split('-');
-                                            if (values.Length != 2)
-                                            {
-                                                warningsBuilder.AppendFormat("Invalid range format: '{0}' for type '{1}'. Ranges must be in the format 'minimum-maximum' with numeric minimum and maximum values.", valueString, iniKey.Name).AppendLine();
-                                                continue;
-                                            }
-
                                             int min;
                                             int max;
-                                            if (!int.TryParse(values[0], out min) || min < 0 || !int.TryParse(values[1], out max) || max < min)
+                                            if (!int.TryParse(valueString.Substring(0, rangeIndex), out min) || min < 0 || !int.TryParse(valueString.Substring(rangeIndex + 1), out max) || max < min)
                                             {
                                                 warningsBuilder.AppendFormat("Invalid range: '{0}' for type '{1}'. Check that minimum is less than maximum and that both are fully numeric.", valueString, iniKey.Name).AppendLine();
                                             }

@@ -55,14 +55,6 @@ namespace InventorySorter
             Block = block;
             QuotaInfo = quotaInfo;
             ResultsType = resultsType;
-            if (quotaInfo.QuotaItems == null)
-            {
-                return;
-            }
-            foreach (var item in quotaInfo.QuotaItems)
-            {
-                MissingItems.Add(item.ItemId, item.Amount);
-            }
         }
     }
     public class AssemblerQuotaInfo

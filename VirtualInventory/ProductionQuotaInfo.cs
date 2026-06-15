@@ -4,105 +4,86 @@ using Sandbox.ModAPI;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI.Ingame.Utilities;
+using VRage.Utils;
 
 namespace InventorySorter.VirtualInventory
 {
     public class ProductionQuotaInfo
     {
-        public static readonly string QuotaSectionName = "Quota";
-        public static readonly string OptionsSectionName = "QuotaOptions";
+        private const string PrimaryTag = "[Primary:";
+        public const string QuotaSectionName = "Quota";
+        private const string OptionsSectionName = "QuotaOptions";
 
-        private static readonly MyIni iniParser = new MyIni();
+        private static readonly MyIni IniParser = new MyIni();
 
         // Using a list for this because the item order is implicit priority
         public RequestValidationStatus RequestStatus;
-        public List<AssemblerQuotaItem> QuotaItems;
+        public readonly List<AssemblerQuotaItem> QuotaItems = new List<AssemblerQuotaItem>();
         public readonly string GroupName;
-        public readonly MyIniParseResult ConfigParseResult;
+        public MyIniParseResult ConfigParseResult;
 
         public ProductionQuotaInfo(IMyAssembler block)
         {
-            // Check to see if the block even has quota data. If it doesn't, there's nothing to do!
-            if (!block.CustomData.Contains("[Quota]"))
-            {
-                RequestStatus = RequestValidationStatus.InvalidCustomData;
-                return;
-            }
-
             // Determine if we have a quota group as part of the assembler name
-            const string tag = "[Primary:";
-            var groupStartIndex = block.DisplayNameText.IndexOf(tag, StringComparison.Ordinal);
+            var groupStartIndex = block.CustomName.IndexOf(PrimaryTag, StringComparison.Ordinal);
             if (groupStartIndex > -1)
             {
-                groupStartIndex += tag.Length;
-                var groupEnd = block.DisplayNameText.IndexOf("]", groupStartIndex, StringComparison.Ordinal);
+                groupStartIndex += PrimaryTag.Length;
+                var groupEnd = block.CustomName.IndexOf("]", groupStartIndex, StringComparison.Ordinal);
                 if (groupEnd > 0)
                 {
-                    GroupName = block.DisplayNameText.Substring(groupStartIndex, groupEnd - groupStartIndex);
+                    GroupName = block.CustomName.Substring(groupStartIndex, groupEnd - groupStartIndex);
                 }
             }
-
-            ConfigParseResult = ParseQuota(block);
         }
 
-        public static AssemblerQuotaInfo ParseQuotaOptions(IMyAssembler block)
+        public static MyIniParseResult Parse(IMyAssembler block)
         {
-            iniParser.Clear();
+            MyIniParseResult parseResult;
+            IniParser.Clear();
+            IniParser.TryParse(block.CustomData, out parseResult);
+            return parseResult;
+        }
 
+        public static AssemblerQuotaInfo ReadOptions(IMyAssembler block)
+        {
             var result = new AssemblerQuotaInfo(block);
-            if (!iniParser.TryParse(block.CustomData))
-            {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota Options config");
-                return result;
-            }
 
-            if (IsCustomDataEmpty(block.CustomData) || !iniParser.ContainsSection(OptionsSectionName))
+            if (IsCustomDataEmpty(block.CustomData) || !IniParser.ContainsSection(OptionsSectionName))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} using default Quota Options config");
                 return result;
             }
 
             List<MyIniKey> iniKeys = new List<MyIniKey>();
-            iniParser.GetKeys(OptionsSectionName, iniKeys);
-            if (!iniParser.Get(OptionsSectionName, "AllowAssembly").TryGetBoolean(out result.AllowAssembly))
+            IniParser.GetKeys(OptionsSectionName, iniKeys);
+            if (!IniParser.Get(OptionsSectionName, "AllowAssembly").TryGetBoolean(out result.AllowAssembly))
             {
                 result.AllowAssembly = true;
             }
 
-            if (!iniParser.Get(OptionsSectionName, "AllowDisassembly").TryGetBoolean(out result.AllowDisassembly))
+            if (!IniParser.Get(OptionsSectionName, "AllowDisassembly").TryGetBoolean(out result.AllowDisassembly))
             {
                 result.AllowDisassembly = false;
             }
 
-            if (!iniParser.Get(OptionsSectionName, "ClearQueue").TryGetBoolean(out result.ClearQueue))
+            if (!IniParser.Get(OptionsSectionName, "ClearQueue").TryGetBoolean(out result.ClearQueue))
             {
                 result.ClearQueue = true;
             }
 
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} Quota Options config: AllowAssembly: {result.AllowAssembly}, AllowDisassembly: {result.AllowDisassembly}, ClearQueue: {result.ClearQueue}");
             return result;
         }
 
-        private MyIniParseResult ParseQuota(IMyAssembler block)
+        public static void ReadQuota(IMyAssembler block, ProductionQuotaInfo info)
         {
-            MyIniParseResult quotaParseResult = new MyIniParseResult();
-            iniParser.Clear();
-            if (IsCustomDataEmpty(block.CustomData) || !iniParser.TryParse(block.CustomData, out quotaParseResult))
+            if (IsCustomDataEmpty(block.CustomData) || !IniParser.ContainsSection(QuotaSectionName))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} failed to parse customdata into Quota config:\n{quotaParseResult.Error}");
-                RequestStatus |= RequestValidationStatus.InvalidCustomData;
-                return quotaParseResult;
+                return;
             }
 
-            List<MyIniKey> iniKeys = new List<MyIniKey>();
-            iniParser.GetKeys(QuotaSectionName, iniKeys);
+            var iniKeys = new List<MyIniKey>();
+            IniParser.GetKeys(QuotaSectionName, iniKeys);
 
-            if (QuotaItems == null)
-            {
-                QuotaItems = new List<AssemblerQuotaItem>();
-            }
-
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: Quota: {block.DisplayNameText} has {iniKeys.Count}");
             foreach (var iniKey in iniKeys)
             {
                 if (iniKey.IsEmpty)
@@ -113,11 +94,11 @@ namespace InventorySorter.VirtualInventory
                 MyDefinitionId definitionId;
                 if (!CargoSorterSessionComponent.Instance.TryGetNormalizedItemDefinition(iniKey.Name, out definitionId))
                 {
-                    RequestStatus |= RequestValidationStatus.InvalidItem;
+                    info.RequestStatus |= RequestValidationStatus.InvalidItem;
                     continue;
                 }
 
-                var value = iniParser.Get(iniKey);
+                var value = IniParser.Get(iniKey);
                 //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
                 if (string.IsNullOrWhiteSpace(valueString))
@@ -129,30 +110,22 @@ namespace InventorySorter.VirtualInventory
                 var rangeIndex = valueString.IndexOf('-');
                 if (rangeIndex != -1)
                 {
-                    var values = valueString.Split(new[] { '-' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (values.Length != 2)
+                    int min, max;
+                    if (!int.TryParse(valueString.Substring(0, rangeIndex), out min) || min < 0 || !int.TryParse(valueString.Substring(rangeIndex + 1), out max) || max < min)
                     {
-                        RequestStatus |= RequestValidationStatus.InvalidCount;
-                        continue;
-                    }
-
-                    int min;
-                    int max;
-                    if (!int.TryParse(values[0], out min) || min < 0 || !int.TryParse(values[1], out max) || max < min)
-                    {
-                        RequestStatus |= RequestValidationStatus.InvalidCount;
+                        info.RequestStatus |= RequestValidationStatus.InvalidCount;
                         continue;
                     }
 
                     var quotaItem = new AssemblerQuotaItem(definitionId, min, max);
-                    QuotaItems.Add(quotaItem);
+                    info.QuotaItems.Add(quotaItem);
                 }
                 else
                 {
                     int itemCount;
                     if (!int.TryParse(valueString.TrimEnd('%', 'l', 'L', 'm', 'M'), out itemCount) || itemCount < 0)
                     {
-                        RequestStatus |= RequestValidationStatus.InvalidCount;
+                        info.RequestStatus |= RequestValidationStatus.InvalidCount;
                         continue;
                     }
 
@@ -160,29 +133,23 @@ namespace InventorySorter.VirtualInventory
                     if (lastChar == 'L' || lastChar == 'l')
                     {
                         var quotaItem = new AssemblerQuotaItem(definitionId, 0, itemCount);
-                        QuotaItems.Add(quotaItem);
+                        info.QuotaItems.Add(quotaItem);
                     }
                     else if (lastChar == 'M' || lastChar == 'm')
                     {
                         var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, MyFixedPoint.MaxIntValue);
-                        QuotaItems.Add(quotaItem);
+                        info.QuotaItems.Add(quotaItem);
                     }
                     else
                     {
                         var quotaItem = new AssemblerQuotaItem(definitionId, itemCount, itemCount);
-                        QuotaItems.Add(quotaItem);
+                        info.QuotaItems.Add(quotaItem);
                     }
                 }
             }
-
-            iniParser.Clear();
-            return quotaParseResult;
         }
 
-        private static bool IsCustomDataEmpty(string customData)
-        {
-            return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsCustomDataEmpty(string customData) { return string.IsNullOrWhiteSpace(customData) || customData.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase) || customData.Equals(bool.FalseString, StringComparison.OrdinalIgnoreCase); }
     }
 
     public struct AssemblerQuotaItem
