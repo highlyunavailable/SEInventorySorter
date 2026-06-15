@@ -12,6 +12,3 @@ Tool tiering:
 Tool swapping:
 * Can we put just 1 tool of a kind in character inventories when
 swapping?
-
-Assemblers:
-* Assemble the list of stuff that was reported missing from last /sort.

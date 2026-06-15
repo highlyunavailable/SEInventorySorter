@@ -401,3 +401,6 @@ FodyWeavers.xsd
 # Space Engineers
 modinfo.sbmi-*
 InventorySorter.mdk.local.ini
+
+# Markdown documentation (ignored to avoid tracking project notes)
+*.md
