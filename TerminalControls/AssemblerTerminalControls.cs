@@ -141,12 +141,12 @@ namespace InventorySorter.TerminalControls
         private static bool HasQueueReady(IMyTerminalBlock block) => Util.IsValid(block) && (block as IMyAssembler)?.IsQueueEmpty == false;
 
         private static bool CanMakeQueueFromCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
-                                                                                  !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.SpecialContainerKeyword) &&
-                                                                                  !block.DisplayNameText.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.LimitedContainerKeyword) &&
+                                                                                  !block.CustomName.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.SpecialContainerKeyword) &&
+                                                                                  !block.CustomName.InsensitiveContains(CargoSorterSessionComponent.Instance?.Config?.LimitedContainerKeyword) &&
                                                                                   block.CustomData.Contains("[Inventory]");
 
         private static bool HasQuotaCustomData(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
-                                                                          block.CustomData.Contains("[Quota]") && !block.DisplayNameText.InsensitiveContains("[Secondary:");
+                                                                          block.CustomData.Contains("[Quota]") && !block.CustomName.InsensitiveContains("[Secondary:");
 
         private static bool HasMissingItems(IMyTerminalBlock block) => Util.IsValid(block) && block is IMyAssembler &&
                                                                        CargoSorterSessionComponent.Instance.LastMissingItems.Count > 0;
@@ -157,7 +157,7 @@ namespace InventorySorter.TerminalControls
             if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null)
             {
                 var data = CargoSorterSessionComponent.Instance.GeneratePrerequisiteCustomDataFromQueue(block as IMyAssembler);
-                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", block.DisplayNameText, " Queue Prerequisites", data, (clickResult) =>
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", block.CustomName, " Queue Prerequisites", data, (clickResult) =>
                 {
                     if (!string.IsNullOrWhiteSpace(data) && clickResult == ResultEnum.OK)
                     {
@@ -172,7 +172,7 @@ namespace InventorySorter.TerminalControls
             if (Util.IsValid(block) && block is IMyAssembler && CargoSorterSessionComponent.Instance != null)
             {
                 var data = CargoSorterSessionComponent.Instance.GenerateResultCustomDataFromQueue(block as IMyAssembler);
-                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", block.DisplayNameText, " Queue Results", data, (clickResult) =>
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", block.CustomName, " Queue Results", data, (clickResult) =>
                 {
                     if (clickResult == ResultEnum.OK)
                     {
@@ -202,7 +202,7 @@ namespace InventorySorter.TerminalControls
                     }
                 }
 
-                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", string.Empty, block.DisplayNameText, sb.ToString());
+                MyAPIGateway.Utilities.ShowMissionScreen("Queue Request Results", string.Empty, block.CustomName, sb.ToString());
             }
         }
 
@@ -255,7 +255,7 @@ namespace InventorySorter.TerminalControls
                     }
 
                     var missingItems = CargoSorterSessionComponent.Instance.LastMissingItems;
-                    MyAPIGateway.Utilities.ShowMissionScreen("Queue Missing Items", block.DisplayNameText, " Missing Items", sb.ToString(), (clickResult) =>
+                    MyAPIGateway.Utilities.ShowMissionScreen("Queue Missing Items", block.CustomName, " Missing Items", sb.ToString(), (clickResult) =>
                     {
                         if (clickResult == ResultEnum.OK)
                         {

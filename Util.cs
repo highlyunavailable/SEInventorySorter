@@ -80,7 +80,7 @@ namespace InventorySorter
             var targetBlocks = CollectBlocksByPattern(rootGrid, destPattern);
             targetBlocks.SortNoAlloc((x, y) =>
             {
-                var comparison = string.CompareOrdinal(x.DisplayNameText, y.DisplayNameText);
+                var comparison = string.CompareOrdinal(x.CustomName, y.CustomName);
                 return comparison == 0 ? x.EntityId.CompareTo(y.EntityId) : comparison;
             });
 
@@ -105,8 +105,8 @@ namespace InventorySorter
             var sourceCustomData = sourceBlocks[0].CustomData;
             MyAPIGateway.Utilities.ShowMissionScreen("Copy Custom Data?",
                 $"From: ",
-                sourceBlocks[0].DisplayNameText,
-                $"Copying Custom Data to the following targets:\nClick OK to confirm and copy, or close this window/press ESC to cancel\n\n{string.Join("\n", targetBlocks.Select(b => b.DisplayNameText))}",
+                sourceBlocks[0].CustomName,
+                $"Copying Custom Data to the following targets:\nClick OK to confirm and copy, or close this window/press ESC to cancel\n\n{string.Join("\n", targetBlocks.Select(b => b.CustomName))}",
                 clickResult =>
                 {
                     if (clickResult != ResultEnum.OK)
@@ -142,7 +142,7 @@ namespace InventorySorter
                     return comparison;
                 }
 
-                comparison = string.CompareOrdinal(x.DisplayNameText, y.DisplayNameText);
+                comparison = string.CompareOrdinal(x.CustomName, y.CustomName);
                 return comparison == 0 ? x.EntityId.CompareTo(y.EntityId) : comparison;
             });
 
@@ -217,7 +217,7 @@ namespace InventorySorter
 
                 if (sourceInfo.Requests.Count > inventory.MaxItemCount)
                 {
-                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Error: {block.DisplayNameText} would exceed max item count");
+                    MyAPIGateway.Utilities.ShowMessage("Sorter", $"Error: {block.CustomName} would exceed max item count");
                     return;
                 }
 
@@ -264,8 +264,8 @@ namespace InventorySorter
 
             MyAPIGateway.Utilities.ShowMissionScreen("Split Custom Data?",
                 $"From: ",
-                sourceBlocks[0].DisplayNameText,
-                $"Splitting custom data over the following targets:\nClick OK to confirm and copy, or close this window/press ESC to cancel\n\n{string.Join("\n", targetCustomData.Keys.Select(b => b.DisplayNameText))}",
+                sourceBlocks[0].CustomName,
+                $"Splitting custom data over the following targets:\nClick OK to confirm and copy, or close this window/press ESC to cancel\n\n{string.Join("\n", targetCustomData.Keys.Select(b => b.CustomName))}",
                 clickResult =>
                 {
                     if (clickResult != ResultEnum.OK)

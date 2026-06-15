@@ -60,7 +60,7 @@ namespace InventorySorter.TerminalControls
             if (Util.IsValid(block) && block is IMyProjector && CargoSorterSessionComponent.Instance != null)
             {
                 var data = CargoSorterSessionComponent.Instance.GenerateCustomDataFromProjector(block as IMyProjector);
-                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", $"{block.DisplayNameText}", " Grid Components", data, (clickResult) =>
+                MyAPIGateway.Utilities.ShowMissionScreen("Generated Custom Data", $"{block.CustomName}", " Grid Components", data, (clickResult) =>
                 {
                     if (!string.IsNullOrWhiteSpace(data) && clickResult == ResultEnum.OK)
                     {

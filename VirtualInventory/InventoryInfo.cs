@@ -94,61 +94,61 @@ namespace InventorySorter.VirtualInventory
                 return;
             }
 
-            if (Block.DisplayNameText.InsensitiveContains(config.SpecialContainerKeyword))
+            if (Block.CustomName.InsensitiveContains(config.SpecialContainerKeyword))
             {
                 TypeRequests = TypeRequests.Special;
                 ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != string.Empty);
             }
             else
             {
-                if (Block.DisplayNameText.InsensitiveContains(config.AnyContainerKeyword))
+                if (Block.CustomName.InsensitiveContains(config.AnyContainerKeyword))
                 {
                     TypeRequests = TypeRequests.Ores | TypeRequests.Ingots | TypeRequests.Components | TypeRequests.Tools | TypeRequests.Ammo | TypeRequests.Bottles | TypeRequests.Consumables | TypeRequests.Ingredients;
                 }
                 else
                 {
-                    if (Block.DisplayNameText.InsensitiveContains(config.OreContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.OreContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ores;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.IngotContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.IngotContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ingots;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.ComponentContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.ComponentContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Components;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.ToolContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.ToolContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Tools;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.AmmoContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.AmmoContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ammo;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.BottleContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.BottleContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Bottles;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.ConsumablesContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.ConsumablesContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Consumables;
                     }
 
-                    if (Block.DisplayNameText.InsensitiveContains(config.IngredientsContainerKeyword))
+                    if (Block.CustomName.InsensitiveContains(config.IngredientsContainerKeyword))
                     {
                         TypeRequests |= TypeRequests.Ingredients;
                     }
                 }
 
-                if (Block.DisplayNameText.InsensitiveContains(config.LimitedContainerKeyword))
+                if (Block.CustomName.InsensitiveContains(config.LimitedContainerKeyword))
                 {
                     TypeRequests |= TypeRequests.Limited;
                     ConfigParseResult = ParseCustomDataRequests("Inventory", sectionName != string.Empty);
@@ -165,13 +165,13 @@ namespace InventorySorter.VirtualInventory
             // {
             //     foreach (var request in Requests)
             //     {
-            //         MyLog.Default.WriteLineAndConsole($"CargoSort ({Block.DisplayNameText}): {request.DefinitionId} {request.Amount} {request.Flag}");
+            //         MyLog.Default.WriteLineAndConsole($"CargoSort ({Block.CustomName}): {request.DefinitionId} {request.Amount} {request.Flag}");
             //     }
             // }
 
             if ((TypeRequests == TypeRequests.Special || TypeRequests == TypeRequests.Limited) && Requests != null && Requests.Count > 0)
             {
-                if (!CheckRequestFit(Requests, realInventory.MaxVolume, realInventory.MaxMass, realInventory.MaxItemCount, realInventory.Constraint))
+                if (!ComputeAndValidateRequests(Requests, realInventory))
                 {
                     RequestStatus |= RequestValidationStatus.TooMuchVolume;
                 }
@@ -221,15 +221,15 @@ namespace InventorySorter.VirtualInventory
                 }
             }
 
-            var priorityStartIndex = Block.DisplayNameText.IndexOf("[P", StringComparison.OrdinalIgnoreCase);
+            var priorityStartIndex = Block.CustomName.IndexOf("[P", StringComparison.OrdinalIgnoreCase);
             if (priorityStartIndex > -1)
             {
                 priorityStartIndex += 2;
                 var priorityLen = 0;
                 var foundTerminator = false;
-                while (priorityStartIndex + priorityLen < Block.DisplayNameText.Length && priorityLen < 4)
+                while (priorityStartIndex + priorityLen < Block.CustomName.Length && priorityLen < 4)
                 {
-                    if (Block.DisplayNameText[priorityStartIndex + priorityLen] == ']')
+                    if (Block.CustomName[priorityStartIndex + priorityLen] == ']')
                     {
                         foundTerminator = true;
                         break;
@@ -240,7 +240,7 @@ namespace InventorySorter.VirtualInventory
 
                 if (priorityLen > 0 && foundTerminator)
                 {
-                    if (!byte.TryParse(Block.DisplayNameText.Substring(priorityStartIndex, priorityLen), out Priority))
+                    if (!byte.TryParse(Block.CustomName.Substring(priorityStartIndex, priorityLen), out Priority))
                     {
                         Priority = byte.MaxValue;
                     }
@@ -358,14 +358,13 @@ namespace InventorySorter.VirtualInventory
                     }
                 }
             }
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.CustomName} wants {TypeRequests} with priority {Priority}");
         }
 
-        private bool CheckRequestFit(List<RequestData> requests, MyFixedPoint maxVolume, MyFixedPoint maxMass, int maxItemCount, MyInventoryConstraint constraint)
+        private bool ComputeAndValidateRequests(List<RequestData> requests, MyInventory realInventory)
         {
-            if (requests.Count > maxItemCount)
+            if (requests.Count > realInventory.MaxItemCount)
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} wants {TypeRequests} with priority {Priority}: max item count exceeded: {maxItemCount}");
                 return false;
             }
 
@@ -375,7 +374,7 @@ namespace InventorySorter.VirtualInventory
             for (var index = 0; index < requests.Count; index++)
             {
                 var request = requests[index];
-                if (constraint != null && !constraint.Check(request.DefinitionId))
+                if (realInventory.Constraint != null && !realInventory.Constraint.Check(request.DefinitionId))
                 {
                     return false;
                 }
@@ -430,14 +429,13 @@ namespace InventorySorter.VirtualInventory
                     sumMass += amount * mass;
                 }
 
-                if (sumVolume > maxVolume || sumMass > maxMass)
+                if (sumVolume > realInventory.MaxVolume || sumMass > realInventory.MaxMass)
                 {
                     return false;
                 }
             }
 
-
-            return sumVolume <= maxVolume && sumMass <= maxMass;
+            return sumVolume <= realInventory.MaxVolume && sumMass <= realInventory.MaxMass;
         }
 
         private MyIniParseResult ParseCustomDataRequests(string sectionName, bool skipCreate = false)
@@ -445,7 +443,7 @@ namespace InventorySorter.VirtualInventory
             var quotaParseResult = new MyIniParseResult();
             if (!Util.IsValid(Block))
             {
-                // MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} isn't a terminal block");
+                // MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.CustomName} isn't a terminal block");
                 return quotaParseResult;
             }
 
@@ -456,14 +454,14 @@ namespace InventorySorter.VirtualInventory
             }
             else if (!IniParser.TryParse(Block.CustomData, out quotaParseResult))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} failed to parse customdata into Special config");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.CustomName} failed to parse customdata into Special config");
                 RequestStatus |= RequestValidationStatus.InvalidCustomData;
                 return quotaParseResult;
             }
 
             if (!skipCreate && !IniParser.ContainsSection(sectionName))
             {
-                //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} has no {sectionName} config section");
+                //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.CustomName} has no {sectionName} config section");
                 Block.CustomData = BuildCurrentContentsSpecialData(Block, sectionName, IniParser);
             }
 
@@ -476,7 +474,7 @@ namespace InventorySorter.VirtualInventory
             }
 
             var specificIndex = -1;
-            //MyLog.Default.WriteLineAndConsole($"CargoSort: {block.DisplayNameText} has {iniKeys.Count}");
+            //MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.CustomName} has {iniKeys.Count}");
             foreach (var iniKey in iniKeys)
             {
                 if (iniKey.IsEmpty)
@@ -507,7 +505,7 @@ namespace InventorySorter.VirtualInventory
                 }
 
                 var value = IniParser.Get(iniKey);
-                // MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.DisplayNameText} key {iniKey.Name} {value}");
+                // MyLog.Default.WriteLineAndConsole($"CargoSort: {Block.CustomName} key {iniKey.Name} {value}");
                 var valueString = value.ToString();
                 if (string.IsNullOrWhiteSpace(valueString))
                 {

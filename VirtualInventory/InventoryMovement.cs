@@ -24,7 +24,7 @@ namespace InventorySorter.VirtualInventory
 
         public override string ToString()
         {
-            return $"{Source?.Block?.DisplayNameText ?? "(NULL)"} -> {Destination?.Block?.DisplayNameText ?? "(NULL)"} : {Item} - {Amount} V: {Volume * 1000}m3 M: {Mass}kg";
+            return $"{Source?.Block?.CustomName ?? "(NULL)"} -> {Destination?.Block?.CustomName ?? "(NULL)"} : {Item} - {Amount} V: {Volume * 1000}m3 M: {Mass}kg";
         }
     }
 }
