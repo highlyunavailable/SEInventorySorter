@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using InventorySorter.VirtualInventory;
+using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
 using VRage;
@@ -193,17 +194,15 @@ namespace InventorySorter
 
                 remainingAmounts[request.DefinitionId] = request.Amount;
 
-                float mass;
-                float volume;
-                bool hasIntegralAmounts;
-                if (!CargoSorterSessionComponent.TryGetPhysicalItemProperties(request.DefinitionId, out volume, out mass, out hasIntegralAmounts))
+                MyPhysicalItemDefinition physItem;
+                if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(request.DefinitionId, out physItem))
                 {
                     MyAPIGateway.Utilities.ShowMessage("Sorter", $"Error: Invalid item in request: {request.DefinitionId}");
                     return;
                 }
 
-                sumVolume += request.Amount * volume;
-                sumMass += request.Amount * mass;
+                sumVolume += request.Amount * physItem.Volume;
+                sumMass += request.Amount * physItem.Mass;
             }
 
             var totalVolume = MyFixedPoint.Zero;

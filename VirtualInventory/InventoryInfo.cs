@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Common.ObjectBuilders.Definitions;
+using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
 using SpaceEngineers.Game.ModAPI;
@@ -376,20 +377,18 @@ namespace InventorySorter.VirtualInventory
                     return false;
                 }
 
-                float volume;
-                float mass;
-                bool hasIntegralAmounts;
-                if (CargoSorterSessionComponent.TryGetPhysicalItemProperties(request.DefinitionId, out volume, out mass, out hasIntegralAmounts))
+                MyPhysicalItemDefinition physItem;
+                if (MyDefinitionManager.Static.TryGetPhysicalItemDefinition(request.DefinitionId, out physItem))
                 {
                     var amount = request.Amount;
 
                     if (request.Flag == RequestFlags.All)
                     {
-                        amount = hasIntegralAmounts ? 1 : MyFixedPoint.SmallestPossibleValue;
+                        amount = physItem.HasIntegralAmounts ? 1 : MyFixedPoint.SmallestPossibleValue;
                     }
                     else if (request.Flag == RequestFlags.Max)
                     {
-                        amount = ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts, sumVolume, sumMass);
+                        amount = ComputeAmountThatCouldFit(physItem, false, sumVolume, sumMass);
                         if (amount == MyFixedPoint.Zero)
                         {
                             return false;
@@ -400,8 +399,8 @@ namespace InventorySorter.VirtualInventory
                     }
                     else if (request.Flag == RequestFlags.Percent)
                     {
-                        amount = (MyFixedPoint)((double)ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts) * ((double)request.Amount / 100.0));
-                        if (hasIntegralAmounts)
+                        amount = (MyFixedPoint)((double)ComputeAmountThatCouldFit(physItem) * ((double)request.Amount / 100.0));
+                        if (physItem.HasIntegralAmounts)
                         {
                             amount = MyFixedPoint.Floor(amount);
                         }
@@ -416,14 +415,14 @@ namespace InventorySorter.VirtualInventory
                     }
                     else
                     {
-                        if (hasIntegralAmounts)
+                        if (physItem.HasIntegralAmounts)
                         {
                             amount = MyFixedPoint.Floor((MyFixedPoint)(Math.Round((double)amount * 1000.0) / 1000.0));
                         }
                     }
 
-                    sumVolume += amount * volume;
-                    sumMass += amount * mass;
+                    sumVolume += amount * physItem.Volume;
+                    sumMass += amount * physItem.Mass;
                 }
 
                 if (sumVolume > realInventory.MaxVolume || sumMass > realInventory.MaxMass)
@@ -625,18 +624,21 @@ namespace InventorySorter.VirtualInventory
 
         internal MyFixedPoint ComputeAmountThatFits(MyDefinitionId contentId, bool forceIntegralAmount = false)
         {
-            float mass;
-            float volume;
-            bool hasIntegralAmounts;
-            if (!CargoSorterSessionComponent.TryGetPhysicalItemProperties(contentId, out volume, out mass, out hasIntegralAmounts))
+            var physItem = MyDefinitionManager.Static.GetPhysicalItemDefinition(contentId);
+            if (physItem == null)
             {
                 return MyFixedPoint.Zero;
             }
 
-            var a = MyFixedPoint.Max((MyFixedPoint)((double)(MaxVolume - VirtualVolume) / (double)volume), 0);
-            var b = MyFixedPoint.Max((MyFixedPoint)((double)(MaxMass - VirtualMass) / (double)mass), 0);
+            return ComputeAmountThatFits(physItem, forceIntegralAmount);
+        }
+
+        internal MyFixedPoint ComputeAmountThatFits(MyPhysicalItemDefinition physItem, bool forceIntegralAmount = false)
+        {
+            var a = MyFixedPoint.Max((MyFixedPoint)((double)(MaxVolume - VirtualVolume) / (double)physItem.Volume), 0);
+            var b = MyFixedPoint.Max((MyFixedPoint)((double)(MaxMass - VirtualMass) / (double)physItem.Mass), 0);
             var amount = MyFixedPoint.Min(a, b);
-            if (hasIntegralAmounts || forceIntegralAmount)
+            if (physItem.HasIntegralAmounts || forceIntegralAmount)
             {
                 amount = MyFixedPoint.Floor(amount);
             }
@@ -646,23 +648,21 @@ namespace InventorySorter.VirtualInventory
 
         internal MyFixedPoint ComputeAmountThatCouldFit(MyDefinitionId contentId, bool forceIntegralAmount = false, MyFixedPoint volumeReserved = default(MyFixedPoint), MyFixedPoint massReserved = default(MyFixedPoint))
         {
-            float mass;
-            float volume;
-            bool hasIntegralAmounts;
-            if (!CargoSorterSessionComponent.TryGetPhysicalItemProperties(contentId, out volume, out mass, out hasIntegralAmounts))
+            var physItem = MyDefinitionManager.Static.GetPhysicalItemDefinition(contentId);
+            if (physItem == null)
             {
                 return MyFixedPoint.Zero;
             }
 
-            return ComputeAmountThatCouldFit(volume, mass, hasIntegralAmounts, volumeReserved, massReserved);
+            return ComputeAmountThatCouldFit(physItem, forceIntegralAmount, volumeReserved, massReserved);
         }
 
-        private MyFixedPoint ComputeAmountThatCouldFit(float volume, float mass, bool hasIntegralAmounts, MyFixedPoint volumeReserved = default(MyFixedPoint), MyFixedPoint massReserved = default(MyFixedPoint))
+        internal MyFixedPoint ComputeAmountThatCouldFit(MyPhysicalItemDefinition physItem, bool forceIntegralAmount = false, MyFixedPoint volumeReserved = default(MyFixedPoint), MyFixedPoint massReserved = default(MyFixedPoint))
         {
-            var a = MyFixedPoint.Max((MyFixedPoint)((double)(MaxVolume - volumeReserved) / (double)volume), 0);
-            var b = MyFixedPoint.Max((MyFixedPoint)((double)(MaxMass - massReserved) / (double)mass), 0);
+            var a = MyFixedPoint.Max((MyFixedPoint)((double)(MaxVolume - volumeReserved) / (double)physItem.Volume), 0);
+            var b = MyFixedPoint.Max((MyFixedPoint)((double)(MaxMass - massReserved) / (double)physItem.Mass), 0);
             var amount = MyFixedPoint.Min(a, b);
-            if (hasIntegralAmounts)
+            if (physItem.HasIntegralAmounts || forceIntegralAmount)
             {
                 amount = MyFixedPoint.Floor(amount);
             }

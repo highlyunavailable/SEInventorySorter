@@ -1377,10 +1377,9 @@ namespace InventorySorter
                                 AppendInventoryOperation(workData, new InventoryMovement(sourceInventory, destInventory, typeBucket.Key, amountToBeMoved, volumeToBeMoved, massToBeMoved));
                             }
                         }
-
-                        nextInventory:
-                        continue;
                     }
+
+                    nextInventory: ;
                 }
             }
         }
@@ -1407,10 +1406,11 @@ namespace InventorySorter
                 {
                     var lowBottleCount = inventoryInfo.LowBottleCount?.GetValueOrDefault(definitionId) ?? MyFixedPoint.Zero;
                     var bottleCount = inventoryInfo.VirtualInventory.GetValueOrDefault(definitionId);
-                    var canFit = inventoryInfo.ComputeAmountThatFits(definitionId, true);
+                    var physItem = MyDefinitionManager.Static.GetPhysicalItemDefinition(definitionId);
+                    var canFit = physItem == null ? MyFixedPoint.Zero : inventoryInfo.ComputeAmountThatFits(physItem, true);
                     if (inventoryInfo.Block is IMyGasGenerator && Config.GasGeneratorFillPercent > 0)
                     {
-                        canFit = MyFixedPoint.Min(canFit, inventoryInfo.ComputeAmountThatCouldFit(definitionId, true,
+                        canFit = MyFixedPoint.Min(canFit, inventoryInfo.ComputeAmountThatCouldFit(physItem, true,
                             MyFixedPoint.Min(inventoryInfo.VirtualVolume, inventoryInfo.MaxVolume * (1f - Config.GasGeneratorFillPercent)),
                             MyFixedPoint.Min(inventoryInfo.VirtualMass, inventoryInfo.MaxMass * (1f - Config.GasGeneratorFillPercent))));
                     }
@@ -1709,6 +1709,19 @@ namespace InventorySorter
             else
             {
                 operation.Source.VirtualInventory[operation.Item] = sourceChangedAmount;
+            }
+
+            // Sync LowBottleCount for GasBottles to match VirtualInventory
+            if (operation.Source.LowBottleCount?.ContainsKey(operation.Item) == true)
+            {
+                if (sourceChangedAmount <= MyFixedPoint.Zero)
+                {
+                    operation.Source.LowBottleCount.Remove(operation.Item);
+                }
+                else
+                {
+                    operation.Source.LowBottleCount[operation.Item] = sourceChangedAmount;
+                }
             }
 
             operation.Destination.VirtualVolume += operation.Volume;
@@ -2363,7 +2376,7 @@ namespace InventorySorter
                     if (string.IsNullOrWhiteSpace(workData.QuotaInfo.GroupName) ? workData.Block == block : assembler.CustomName.InsensitiveContains(workData.QuotaInfo.GroupName))
                     {
                         var parseResult = ProductionQuotaInfo.Parse(assembler);
-                        
+
                         if (parseResult.Success)
                         {
                             workData.GroupAssemblers.Add(ProductionQuotaInfo.ReadOptions(assembler));
