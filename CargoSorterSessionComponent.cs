@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -1710,17 +1710,31 @@ namespace InventorySorter
             {
                 operation.Source.VirtualInventory[operation.Item] = sourceChangedAmount;
             }
-
-            // Sync LowBottleCount for GasBottles to match VirtualInventory
-            if (operation.Source.LowBottleCount?.ContainsKey(operation.Item) == true)
+            // Sync LowBottleCount for GasBottles
+            if (operation.Item.TypeId == typeof(MyObjectBuilder_GasContainerObject) || operation.Item.TypeId == typeof(MyObjectBuilder_OxygenContainerObject))
             {
-                if (sourceChangedAmount <= MyFixedPoint.Zero)
+                if (operation.Destination.TypeRequests.HasFlag(TypeRequests.GasBottles))
                 {
-                    operation.Source.LowBottleCount.Remove(operation.Item);
-                }
-                else
-                {
-                    operation.Source.LowBottleCount[operation.Item] = sourceChangedAmount;
+                    // Moving TO bottle filler - all items are low bottles, decrement source LowBottleCount
+                    if (operation.Source.LowBottleCount?.ContainsKey(operation.Item) == true)
+                    {
+                        var sourceLowAmount = operation.Source.LowBottleCount[operation.Item] - operation.Amount;
+                        if (sourceLowAmount <= MyFixedPoint.Zero)
+                        {
+                            operation.Source.LowBottleCount.Remove(operation.Item);
+                        }
+                        else
+                        {
+                            operation.Source.LowBottleCount[operation.Item] = sourceLowAmount;
+                        }
+                    }
+
+                    // Increment destination LowBottleCount for low bottles received
+                    if (operation.Destination.LowBottleCount == null)
+                    {
+                        operation.Destination.LowBottleCount = new Dictionary<MyDefinitionId, MyFixedPoint>();
+                    }
+                    operation.Destination.LowBottleCount[operation.Item] = operation.Destination.LowBottleCount.GetValueOrDefault(operation.Item, MyFixedPoint.Zero) + operation.Amount;
                 }
             }
 

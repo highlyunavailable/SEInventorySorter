@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Common.ObjectBuilders.Definitions;
@@ -21,7 +21,7 @@ namespace InventorySorter.VirtualInventory
         public List<RequestData> Requests;
         public RequestValidationStatus RequestStatus;
         public readonly Dictionary<MyDefinitionId, MyFixedPoint> VirtualInventory;
-        public readonly Dictionary<MyDefinitionId, MyFixedPoint> LowBottleCount;
+        public Dictionary<MyDefinitionId, MyFixedPoint> LowBottleCount;
         public MyFixedPoint VirtualVolume;
         public MyFixedPoint VirtualMass;
         public readonly MyFixedPoint MaxVolume;
