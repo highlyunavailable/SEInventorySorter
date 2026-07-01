@@ -45,7 +45,7 @@ namespace InventorySorter.VirtualInventory
             Constraint = realInventory.Constraint;
             RealInventory = realInventory;
             // Require conveyors for weapons always since some weapons are balanced by being manually reloadable only.
-            SupportsConveyors = CargoSorterSessionComponent.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
+            SupportsConveyors = CargoSorterSessionComponent.Instance.HasConveyorSupport(Block) || CargoSorterSessionComponent.Instance.IsWeapon(Block);
             IsSatisfied = false;
 
             // Generate constraint like Keen does since it's not an inventory constraint
